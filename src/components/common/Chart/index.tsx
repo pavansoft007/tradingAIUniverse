@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import type { ApexOptions } from "apexcharts";
 import { useTheme, alpha } from "@mui/material/styles";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const ApexChart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
@@ -36,6 +36,18 @@ export type ChartProps = {
 // ── Chart component ───────────────────────────────────────────────────────────
 
 export default function Chart({ type, series, options = {}, width = "100%", height = 320 }: ChartProps) {
+  // Guard: don't render ApexChart if the component has been unmounted.
+  // This prevents the runMaskReveal "null node" crash that occurs when
+  // a route transition tears down the component while ApexCharts is still
+  // running its (now disabled) entry animation timer.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
+
+  if (!mounted) return null;
+
   return (
     <ApexChart
       type={type}
@@ -60,7 +72,10 @@ export function useChart(options?: ApexOptions): ApexOptions {
         zoom: { enabled: false },
         background: "transparent",
         foreColor: theme.palette.text.secondary,
-        animations: { enabled: true, speed: 400 },
+        // Animations disabled: ApexCharts' runMaskReveal fires asynchronously and
+        // crashes with "null node" when the component unmounts mid-animation on
+        // route transitions. Disabling animations is the only reliable fix.
+        animations: { enabled: false },
         fontFamily: theme.typography.fontFamily,
       },
       colors: [

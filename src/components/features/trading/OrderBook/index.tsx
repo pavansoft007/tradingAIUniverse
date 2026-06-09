@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Box,
   Chip,
@@ -19,7 +19,6 @@ import {
 } from "@mui/material";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
 import { useOrderBook, useCancelOrder } from "@/hooks/useAngelOrders";
-import { selectOpenOrders, selectFilledOrders } from "@/store/useOrderStore";
 import { useOrderStore } from "@/store/useOrderStore";
 import { ANGEL_VARIETY } from "@/types/angel-order.types";
 import type { AngelOrder } from "@/types/angel-order.types";
@@ -124,9 +123,19 @@ export function OrderBook() {
   const { isFetching } = useOrderBook();
   const { mutate: cancelOrder, isPending: cancelling } = useCancelOrder();
 
-  const allOrders    = useOrderStore((s) => s.orders);
-  const openOrders   = useOrderStore(selectOpenOrders);
-  const filledOrders = useOrderStore(selectFilledOrders);
+  const allOrders = useOrderStore((s) => s.orders);
+
+  const openOrders = useMemo(
+    () => allOrders.filter((o) =>
+      ["open", "pending", "trigger pending", "AMO REQ RECEIVED"].includes(o.status)
+    ),
+    [allOrders],
+  );
+
+  const filledOrders = useMemo(
+    () => allOrders.filter((o) => o.status === "complete"),
+    [allOrders],
+  );
 
   const rows: AngelOrder[] =
     tab === "open"    ? openOrders

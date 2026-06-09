@@ -1,11 +1,11 @@
 /**
  * Angel One SmartAPI — order REST endpoints.
  *
- * All paths use the authenticated `smartApiClient` which automatically
+ * All paths use the authenticated `orderProxyClient` which automatically
  * injects the JWT and handles 401 → token refresh.
  */
 
-import smartApiClient from "@/lib/api/smartApiClient";
+import orderProxyClient from "@/lib/api/orderProxyClient";
 import type {
   AngelApiResponse,
   AngelCancelOrderRequest,
@@ -46,7 +46,7 @@ export const orderApi = {
    * Returns the assigned orderid and uniqueorderid.
    */
   async placeOrder(payload: AngelPlaceOrderRequest): Promise<AngelOrderPlaced> {
-    const { data } = await smartApiClient.post<AngelApiResponse<AngelOrderPlaced>>(
+    const { data } = await orderProxyClient.post<AngelApiResponse<AngelOrderPlaced>>(
       PATHS.placeOrder,
       payload,
     );
@@ -58,7 +58,7 @@ export const orderApi = {
    * Modify an open or pending order.
    */
   async modifyOrder(payload: AngelModifyOrderRequest): Promise<{ orderid: string }> {
-    const { data } = await smartApiClient.post<AngelApiResponse<{ orderid: string }>>(
+    const { data } = await orderProxyClient.post<AngelApiResponse<{ orderid: string }>>(
       PATHS.modifyOrder,
       payload,
     );
@@ -70,7 +70,7 @@ export const orderApi = {
    * Cancel an open or pending order.
    */
   async cancelOrder(payload: AngelCancelOrderRequest): Promise<{ orderid: string }> {
-    const { data } = await smartApiClient.post<AngelApiResponse<{ orderid: string }>>(
+    const { data } = await orderProxyClient.post<AngelApiResponse<{ orderid: string }>>(
       PATHS.cancelOrder,
       payload,
     );
@@ -82,7 +82,7 @@ export const orderApi = {
    * Fetch today's complete order book.
    */
   async getOrderBook(): Promise<AngelOrder[]> {
-    const { data } = await smartApiClient.get<AngelApiResponse<AngelOrder[] | null>>(
+    const { data } = await orderProxyClient.get<AngelApiResponse<AngelOrder[] | null>>(
       PATHS.orderBook,
     );
     // Angel One returns status: true with data: null when no orders exist
@@ -96,7 +96,7 @@ export const orderApi = {
    * Fetch today's executed trades.
    */
   async getTradeBook(): Promise<AngelTrade[]> {
-    const { data } = await smartApiClient.get<AngelApiResponse<AngelTrade[] | null>>(
+    const { data } = await orderProxyClient.get<AngelApiResponse<AngelTrade[] | null>>(
       PATHS.tradeBook,
     );
     if (!data.status && data.errorcode !== "AB1006") {
@@ -109,7 +109,7 @@ export const orderApi = {
    * Fetch all open positions (intraday + delivery).
    */
   async getPositions(): Promise<{ net: AngelPosition[]; day: AngelPosition[] }> {
-    const { data } = await smartApiClient.get<
+    const { data } = await orderProxyClient.get<
       AngelApiResponse<{ net: AngelPosition[] | null; day: AngelPosition[] | null } | null>
     >(PATHS.positions);
     if (!data.status && data.errorcode !== "AB1006") {
@@ -125,7 +125,7 @@ export const orderApi = {
    * Fetch detail for a single order by its uniqueorderid.
    */
   async getOrderDetail(uniqueOrderId: string): Promise<AngelOrder> {
-    const { data } = await smartApiClient.get<AngelApiResponse<AngelOrder>>(
+    const { data } = await orderProxyClient.get<AngelApiResponse<AngelOrder>>(
       PATHS.orderDetail(uniqueOrderId),
     );
     assertSuccess(data, "getOrderDetail");

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { orderApi } from "@/lib/api/angelone/order.api";
 import { executeOrder } from "@/lib/orders/executor";
 import { useOrderStore } from "@/store/useOrderStore";
+import { sessionUtil } from "@/lib/utils/session";
 import type {
   AngelCancelOrderRequest,
   AngelModifyOrderRequest,
@@ -21,12 +22,14 @@ export const ORDER_KEYS = {
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
-/** Polls Angel One order book every 5 seconds. */
+/** Polls Angel One order book every 5 seconds. Only runs when authenticated. */
 export function useOrderBook() {
   const setOrders = useOrderStore((s) => s.setOrders);
+  const isAuth = !!sessionUtil.loadJWT();
 
   return useQuery({
     queryKey:  ORDER_KEYS.book,
+    enabled:   isAuth,
     queryFn:   async () => {
       const orders = await orderApi.getOrderBook();
       setOrders(orders);
@@ -34,15 +37,18 @@ export function useOrderBook() {
     },
     refetchInterval: 5_000,
     staleTime:       4_000,
+    retry:           false,
   });
 }
 
-/** Polls executed trades — refreshed every 10 s (trades don't change as rapidly). */
+/** Polls executed trades every 10 s. Only runs when authenticated. */
 export function useTradeBook() {
   const setTrades = useOrderStore((s) => s.setTrades);
+  const isAuth = !!sessionUtil.loadJWT();
 
   return useQuery({
     queryKey: ORDER_KEYS.trades,
+    enabled:  isAuth,
     queryFn:  async () => {
       const trades = await orderApi.getTradeBook();
       setTrades(trades);
@@ -50,15 +56,18 @@ export function useTradeBook() {
     },
     refetchInterval: 10_000,
     staleTime:       9_000,
+    retry:           false,
   });
 }
 
-/** Polls open positions every 5 seconds. */
+/** Polls open positions every 5 seconds. Only runs when authenticated. */
 export function usePositions() {
   const setPositions = useOrderStore((s) => s.setPositions);
+  const isAuth = !!sessionUtil.loadJWT();
 
   return useQuery({
     queryKey: ORDER_KEYS.positions,
+    enabled:  isAuth,
     queryFn:  async () => {
       const { net } = await orderApi.getPositions();
       setPositions(net);
@@ -66,6 +75,7 @@ export function usePositions() {
     },
     refetchInterval: 5_000,
     staleTime:       4_000,
+    retry:           false,
   });
 }
 
