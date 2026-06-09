@@ -1,57 +1,39 @@
 "use client";
 
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
-import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import Box from "@mui/material/Box";
-import Chip from "@mui/material/Chip";
-import Divider from "@mui/material/Divider";
-import LinearProgress from "@mui/material/LinearProgress";
-import Skeleton from "@mui/material/Skeleton";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
-import Tooltip from "@mui/material/Tooltip";
-import Typography from "@mui/material/Typography";
+import TrendingUpIcon   from "@mui/icons-material/TrendingUp";
+import Box              from "@mui/material/Box";
+import Chip             from "@mui/material/Chip";
+import Divider          from "@mui/material/Divider";
+import LinearProgress   from "@mui/material/LinearProgress";
+import Skeleton         from "@mui/material/Skeleton";
+import Table            from "@mui/material/Table";
+import TableBody        from "@mui/material/TableBody";
+import TableCell        from "@mui/material/TableCell";
+import TableContainer   from "@mui/material/TableContainer";
+import TableHead        from "@mui/material/TableHead";
+import TableRow         from "@mui/material/TableRow";
+import Tooltip          from "@mui/material/Tooltip";
+import Typography       from "@mui/material/Typography";
 import { alpha, useTheme } from "@mui/material/styles";
-import { useMemo } from "react";
-import { PriceCell } from "@/components/features/market/PriceCell";
-import { useTickData } from "@/hooks/useMarketWatch";
+import { useMemo }      from "react";
+import { PriceCell }    from "@/components/features/market/PriceCell";
+import { useHoldingsAsPositions } from "@/hooks/usePortfolio";
+import { useTickData }  from "@/hooks/useMarketWatch";
 import type { ExchangeType } from "@/types/smartws.types";
-import { EXCHANGE_TYPE, WS_MODE } from "@/types/smartws.types";
+import { WS_MODE } from "@/types/smartws.types";
 
-// ── Position data with Angel One token IDs ─────────────────────────────────────
+// ── Position shape ─────────────────────────────────────────────────────────────
 
 export interface PositionItem {
-  symbol: string;
-  name: string;
-  token: string;
+  symbol:       string;
+  name:         string;
+  token:        string;
   exchangeType: ExchangeType;
-  qty: number;
-  avgEntry: number;
-  alloc: number;
+  qty:          number;
+  avgEntry:     number;
+  alloc:        number;
 }
-
-export const PORTFOLIO_POSITIONS: PositionItem[] = [
-  { symbol: "RELIANCE",   name: "Reliance Industries", token: "2885",  exchangeType: EXCHANGE_TYPE.NSE_CM, qty: 25, avgEntry: 2420, alloc: 28.4 },
-  { symbol: "TCS",        name: "Tata Consultancy",    token: "11536", exchangeType: EXCHANGE_TYPE.NSE_CM, qty: 15, avgEntry: 3350, alloc: 23.1 },
-  { symbol: "HDFCBANK",   name: "HDFC Bank",           token: "1333",  exchangeType: EXCHANGE_TYPE.NSE_CM, qty: 40, avgEntry: 1560, alloc: 28.7 },
-  { symbol: "INFY",       name: "Infosys",             token: "1594",  exchangeType: EXCHANGE_TYPE.NSE_CM, qty: 30, avgEntry: 1480, alloc: 17.5 },
-  { symbol: "WIPRO",      name: "Wipro",               token: "3787",  exchangeType: EXCHANGE_TYPE.NSE_CM, qty: 20, avgEntry: 520,  alloc: 4.1  },
-  { symbol: "BAJFINANCE", name: "Bajaj Finance",       token: "317",   exchangeType: EXCHANGE_TYPE.NSE_CM, qty: 5,  avgEntry: 6800, alloc: 15.2 },
-];
-
-// Fallback LTP when WebSocket is not connected (last known price from mock)
-const FALLBACK_LTP: Record<string, number> = {
-  "2885":  2710,
-  "11536": 3682,
-  "1333":  1713,
-  "1594":  1390,
-  "3787":  496,
-  "317":   7250,
-};
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -63,18 +45,19 @@ function fmtPrice(p: number) {
 
 function LiveRow({ position }: { position: PositionItem }) {
   const theme = useTheme();
+  // Subscribe to WebSocket LTP for this token
   const tick  = useTickData(position.token, position.exchangeType, WS_MODE.LTP);
-  const ltp   = tick?.ltp ?? FALLBACK_LTP[position.token] ?? position.avgEntry;
+  // Fall back to avgEntry if no live tick yet (pre-market / offline)
+  const ltp   = tick?.ltp ?? position.avgEntry;
 
-  const pnl       = (ltp - position.avgEntry) * position.qty;
-  const pnlPct    = ((ltp - position.avgEntry) / position.avgEntry) * 100;
-  const curValue  = ltp * position.qty;
-  const isUp      = pnl >= 0;
-  const pnlColor  = isUp ? theme.palette.success.main : theme.palette.error.main;
+  const pnl      = (ltp - position.avgEntry) * position.qty;
+  const pnlPct   = position.avgEntry > 0 ? ((ltp - position.avgEntry) / position.avgEntry) * 100 : 0;
+  const curValue = ltp * position.qty;
+  const isUp     = pnl >= 0;
+  const pnlColor = isUp ? theme.palette.success.main : theme.palette.error.main;
 
   return (
     <TableRow hover sx={{ "&:last-child td": { border: 0 } }}>
-      {/* Symbol */}
       <TableCell sx={{ pl: 2.5 }}>
         <Box>
           <Typography sx={{ fontSize: 13, fontWeight: 700, fontFamily: "monospace", letterSpacing: "0.01em" }}>
@@ -84,51 +67,33 @@ function LiveRow({ position }: { position: PositionItem }) {
         </Box>
       </TableCell>
 
-      {/* Qty */}
       <TableCell align="right">
         <Typography sx={{ fontSize: 13, fontFeatureSettings: '"tnum"' }}>{position.qty}</Typography>
       </TableCell>
 
-      {/* Avg Entry */}
       <TableCell align="right">
         <Typography sx={{ fontSize: 13, color: "text.secondary", fontFeatureSettings: '"tnum"' }}>
           {fmtPrice(position.avgEntry)}
         </Typography>
       </TableCell>
 
-      {/* LTP — live with flash animation */}
       <TableCell align="right">
         <PriceCell price={ltp} prevClose={position.avgEntry} formatFn={fmtPrice} />
       </TableCell>
 
-      {/* P&L */}
       <TableCell align="right">
         <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 0.25 }}>
-          <Typography
-            sx={{
-              fontSize: 13,
-              fontWeight: 700,
-              color: pnlColor,
-              fontFeatureSettings: '"tnum"',
-            }}
-          >
-            {isUp ? "+" : ""}
-            {fmtPrice(Math.abs(pnl))}
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: pnlColor, fontFeatureSettings: '"tnum"' }}>
+            {isUp ? "+" : ""}{fmtPrice(Math.abs(pnl))}
           </Typography>
           <Chip
             label={`${isUp ? "+" : ""}${pnlPct.toFixed(2)}%`}
             size="small"
-            icon={
-              isUp ? (
-                <TrendingUpIcon sx={{ fontSize: "11px !important", color: `${pnlColor} !important` }} />
-              ) : (
-                <TrendingDownIcon sx={{ fontSize: "11px !important", color: `${pnlColor} !important` }} />
-              )
-            }
+            icon={isUp
+              ? <TrendingUpIcon   sx={{ fontSize: "11px !important", color: `${pnlColor} !important` }} />
+              : <TrendingDownIcon sx={{ fontSize: "11px !important", color: `${pnlColor} !important` }} />}
             sx={{
-              height: 18,
-              fontSize: 10,
-              fontWeight: 700,
+              height: 18, fontSize: 10, fontWeight: 700,
               background: alpha(pnlColor, 0.12),
               color: pnlColor,
               border: `1px solid ${alpha(pnlColor, 0.25)}`,
@@ -137,24 +102,20 @@ function LiveRow({ position }: { position: PositionItem }) {
         </Box>
       </TableCell>
 
-      {/* Current value */}
       <TableCell align="right">
         <Typography sx={{ fontSize: 13, fontWeight: 600, fontFeatureSettings: '"tnum"' }}>
           {fmtPrice(curValue)}
         </Typography>
       </TableCell>
 
-      {/* Allocation bar */}
       <TableCell align="right" sx={{ pr: 2.5 }}>
         <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 0.5 }}>
           <Typography sx={{ fontSize: 12.5, fontWeight: 600 }}>{position.alloc}%</Typography>
           <LinearProgress
             variant="determinate"
-            value={position.alloc}
+            value={Math.min(position.alloc, 100)}
             sx={{
-              width: 64,
-              height: 4,
-              borderRadius: 2,
+              width: 64, height: 4, borderRadius: 2,
               background: alpha(theme.palette.primary.main, 0.12),
               "& .MuiLinearProgress-bar": {
                 background: `linear-gradient(90deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.light} 100%)`,
@@ -167,7 +128,7 @@ function LiveRow({ position }: { position: PositionItem }) {
   );
 }
 
-// ── Skeleton rows for loading state ───────────────────────────────────────────
+// ── Skeleton loading rows ──────────────────────────────────────────────────────
 
 function SkeletonRow() {
   return (
@@ -187,73 +148,50 @@ function SkeletonRow() {
 function SummaryRow({ positions }: { positions: PositionItem[] }) {
   const theme = useTheme();
 
-  const { totalValue, totalPnL } = useMemo(() => {
-    return positions.reduce(
-      (acc, pos) => {
-        const ltp      = FALLBACK_LTP[pos.token] ?? pos.avgEntry;
-        const curValue = ltp * pos.qty;
-        const pnl      = (ltp - pos.avgEntry) * pos.qty;
-        acc.totalValue += curValue;
-        acc.totalPnL   += pnl;
-        return acc;
-      },
-      { totalValue: 0, totalPnL: 0 },
-    );
-  }, [positions]);
+  // Use avgEntry × qty as a rough total since live LTP hooks can't run in memo
+  const totalCost = useMemo(
+    () => positions.reduce((acc, pos) => acc + pos.avgEntry * pos.qty, 0),
+    [positions],
+  );
 
-  const isUp = totalPnL >= 0;
-  const color = isUp ? theme.palette.success.main : theme.palette.error.main;
-  const pnlPct = (totalPnL / (totalValue - totalPnL)) * 100;
+  // totalPnL will be 0 here since both use avgEntry — live rows already show real PnL individually
 
   return (
-    <>
-      <TableRow
-        sx={{
-          bgcolor: isUp
-            ? alpha(theme.palette.success.main, 0.04)
-            : alpha(theme.palette.error.main, 0.04),
-        }}
-      >
-        <TableCell colSpan={5} sx={{ pl: 2.5, py: 1 }}>
-          <Typography sx={{ fontSize: 12, fontWeight: 700, color: "text.secondary" }}>
-            Total ({positions.length} holdings)
+    <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
+      <TableCell colSpan={5} sx={{ pl: 2.5, py: 1 }}>
+        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "text.secondary" }}>
+          Total · {positions.length} holding{positions.length !== 1 ? "s" : ""}
+        </Typography>
+      </TableCell>
+      <TableCell align="right">
+        <Tooltip title="Invested value (avg × qty)">
+          <Typography sx={{ fontSize: 13, fontWeight: 800, fontFeatureSettings: '"tnum"' }}>
+            {fmtPrice(totalCost)}
           </Typography>
-        </TableCell>
-        <TableCell align="right">
-          <Tooltip title="Total current value">
-            <Typography sx={{ fontSize: 13, fontWeight: 800, fontFeatureSettings: '"tnum"' }}>
-              {fmtPrice(totalValue)}
-            </Typography>
-          </Tooltip>
-        </TableCell>
-        <TableCell align="right" sx={{ pr: 2.5 }}>
-          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "flex-end" }}>
-            <Typography sx={{ fontSize: 13, fontWeight: 800, color, fontFeatureSettings: '"tnum"' }}>
-              {isUp ? "+" : ""}
-              {fmtPrice(Math.abs(totalPnL))}
-            </Typography>
-            <Typography sx={{ fontSize: 11, color, fontWeight: 600 }}>
-              {isUp ? "+" : ""}
-              {pnlPct.toFixed(2)}%
-            </Typography>
-          </Box>
-        </TableCell>
-      </TableRow>
-    </>
+        </Tooltip>
+      </TableCell>
+      <TableCell align="right" sx={{ pr: 2.5 }}>
+        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>Live rows above</Typography>
+      </TableCell>
+    </TableRow>
   );
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
 interface LivePositionsTableProps {
+  /** Override positions (e.g. from parent page that already fetched). */
   positions?: PositionItem[];
-  loading?: boolean;
+  loading?:   boolean;
 }
 
-export function LivePositionsTable({
-  positions = PORTFOLIO_POSITIONS,
-  loading = false,
-}: LivePositionsTableProps) {
+export function LivePositionsTable({ positions: propPositions, loading: propLoading }: LivePositionsTableProps) {
+  // If caller doesn't supply positions, fetch from Angel One holdings API
+  const { positions: apiPositions, isLoading: apiLoading } = useHoldingsAsPositions();
+
+  const positions = propPositions ?? apiPositions;
+  const loading   = propLoading  ?? apiLoading;
+
   return (
     <>
       <TableContainer>
@@ -262,7 +200,7 @@ export function LivePositionsTable({
             <TableRow>
               <TableCell sx={{ pl: 2.5, fontWeight: 700, minWidth: 160 }}>Symbol</TableCell>
               <TableCell align="right" sx={{ fontWeight: 700, minWidth: 60 }}>Qty</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 700, minWidth: 100 }}>Avg Entry</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700, minWidth: 100 }}>Avg Price</TableCell>
               <TableCell align="right" sx={{ fontWeight: 700, minWidth: 110 }}>LTP (Live)</TableCell>
               <TableCell align="right" sx={{ fontWeight: 700, minWidth: 130 }}>P&amp;L</TableCell>
               <TableCell align="right" sx={{ fontWeight: 700, minWidth: 110 }}>Value</TableCell>
@@ -272,12 +210,22 @@ export function LivePositionsTable({
           <TableBody>
             {loading
               ? Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)
-              : positions.map((pos) => <LiveRow key={pos.symbol} position={pos} />)}
+              : positions.length === 0
+              ? (
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 5 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No holdings — log in to Angel One to see your portfolio
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )
+              : positions.map((pos) => <LiveRow key={`${pos.token}-${pos.symbol}`} position={pos} />)}
           </TableBody>
         </Table>
       </TableContainer>
 
-      {!loading && (
+      {!loading && positions.length > 0 && (
         <>
           <Divider />
           <Table size="small">

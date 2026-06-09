@@ -69,13 +69,38 @@ export function usePositions() {
     queryKey: ORDER_KEYS.positions,
     enabled:  isAuth,
     queryFn:  async () => {
-      const { net } = await orderApi.getPositions();
-      setPositions(net);
-      return net;
+      // getPositions now returns a flat array
+      const positions = await orderApi.getPositions();
+      setPositions(positions);
+      return positions;
     },
     refetchInterval: 5_000,
     staleTime:       4_000,
     retry:           false,
+  });
+}
+
+/** Convert a position from one product type to another (e.g. MIS → CNC). */
+export function useConvertPosition() {
+  const qc = useQueryClient();
+  const { pushNotif } = useOrderStore();
+
+  return useMutation({
+    mutationFn: (payload: Parameters<typeof orderApi.convertPosition>[0]) =>
+      orderApi.convertPosition(payload),
+
+    onSuccess: (_, payload) => {
+      pushNotif(
+        "success",
+        "Position Converted",
+        `${payload.tradingsymbol} converted from ${payload.oldproducttype} → ${payload.newproducttype}`,
+      );
+      qc.invalidateQueries({ queryKey: ORDER_KEYS.positions });
+    },
+
+    onError: (err: Error) => {
+      pushNotif("error", "Conversion Failed", err.message || "Could not convert position");
+    },
   });
 }
 

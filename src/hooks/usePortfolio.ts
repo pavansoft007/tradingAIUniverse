@@ -1,57 +1,76 @@
+"use client";
+
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { portfolioService } from "@/lib/api/services/portfolio.service";
-import { usePortfolioStore } from "@/store/usePortfolioStore";
+import { getFunds, getHoldings } from "@/lib/api/angelone/portfolio.api";
+import { sessionUtil } from "@/lib/utils/session";
+import { EXCHANGE_TYPE } from "@/types/smartws.types";
+import type { PositionItem } from "@/components/features/portfolio/LivePositionsTable";
 
 export const PORTFOLIO_KEYS = {
-  all: ["portfolio"] as const,
-  list: () => [...PORTFOLIO_KEYS.all, "list"] as const,
-  detail: (id: string) => [...PORTFOLIO_KEYS.all, "detail", id] as const,
-  positions: (id: string) => [...PORTFOLIO_KEYS.all, "positions", id] as const,
-  performance: (id: string, period?: string) => [...PORTFOLIO_KEYS.all, "performance", id, period] as const,
-  trades: (page?: number) => [...PORTFOLIO_KEYS.all, "trades", page] as const,
+  holdings: ["angel", "portfolio", "holdings"] as const,
+  funds:    ["angel", "portfolio", "funds"]    as const,
 };
 
-export function usePortfolios() {
-  const { setPortfolios } = usePortfolioStore();
+export function useHoldings() {
+  const isAuth = !!sessionUtil.loadJWT();
   return useQuery({
-    queryKey: PORTFOLIO_KEYS.list(),
-    queryFn: async () => {
-      const res = await portfolioService.getPortfolios();
-      setPortfolios(res.data);
-      return res;
-    },
-  });
-}
-
-export function usePortfolio(id: string) {
-  return useQuery({
-    queryKey: PORTFOLIO_KEYS.detail(id),
-    queryFn: () => portfolioService.getPortfolio(id),
-    enabled: !!id,
+    queryKey:        PORTFOLIO_KEYS.holdings,
+    enabled:         isAuth,
+    queryFn:         getHoldings,
     refetchInterval: 30_000,
+    staleTime:       25_000,
+    retry:           false,
   });
 }
 
-export function usePositions(portfolioId: string) {
+export function useFunds() {
+  const isAuth = !!sessionUtil.loadJWT();
   return useQuery({
-    queryKey: PORTFOLIO_KEYS.positions(portfolioId),
-    queryFn: () => portfolioService.getPositions(portfolioId),
-    enabled: !!portfolioId,
-    refetchInterval: 15_000,
+    queryKey:        PORTFOLIO_KEYS.funds,
+    enabled:         isAuth,
+    queryFn:         getFunds,
+    refetchInterval: 30_000,
+    staleTime:       25_000,
+    retry:           false,
   });
 }
 
-export function usePerformance(portfolioId: string, period?: string) {
-  return useQuery({
-    queryKey: PORTFOLIO_KEYS.performance(portfolioId, period),
-    queryFn: () => portfolioService.getPerformance(portfolioId, period),
-    enabled: !!portfolioId,
-  });
-}
+export function useHoldingsAsPositions(): {
+  positions: PositionItem[];
+  totalValue: number;
+  isLoading:  boolean;
+} {
+  const { data: holdingsData, isLoading } = useHoldings();
+  const holdings     = holdingsData?.holdings     ?? [];
+  const totalHolding = holdingsData?.totalholding;
 
-export function useTrades(page = 1, limit = 20) {
-  return useQuery({
-    queryKey: PORTFOLIO_KEYS.trades(page),
-    queryFn: () => portfolioService.getTrades({ page, limit }),
-  });
+  const positions = useMemo<PositionItem[]>(() => {
+    if (!holdings.length) return [];
+    const totalValue = totalHolding?.totalholdingvalue ?? 1;
+
+    return holdings
+      .filter((h) => h.quantity > 0)
+      .map((h) => {
+        const curValue = (h.close || h.averageprice) * h.quantity;
+        const alloc    = totalValue > 0 ? (curValue / totalValue) * 100 : 0;
+        const symbol   = h.tradingsymbol.replace(/-EQ$|-BE$|-N$|-Z$/, "");
+
+        return {
+          symbol,
+          name:         symbol,
+          token:        h.symboltoken,
+          exchangeType: h.exchange === "BSE" ? EXCHANGE_TYPE.BSE_CM : EXCHANGE_TYPE.NSE_CM,
+          qty:          h.quantity,
+          avgEntry:     h.averageprice,
+          alloc:        Math.round(alloc * 10) / 10,
+        } satisfies PositionItem;
+      });
+  }, [holdings, totalHolding]);
+
+  return {
+    positions,
+    totalValue: totalHolding?.totalholdingvalue ?? 0,
+    isLoading,
+  };
 }

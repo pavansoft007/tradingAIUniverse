@@ -1,128 +1,150 @@
 "use client";
 
 import AccountBalanceWalletOutlinedIcon from "@mui/icons-material/AccountBalanceWalletOutlined";
-import AutoGraphIcon from "@mui/icons-material/AutoGraph";
+import AutoGraphIcon  from "@mui/icons-material/AutoGraph";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
-import Box from "@mui/material/Box";
-import Card from "@mui/material/Card";
-import Chip from "@mui/material/Chip";
-import Grid from "@mui/material/Grid";
-import Typography from "@mui/material/Typography";
-import { PageHeader } from "@/components/common/PageHeader";
-import { StatCard } from "@/components/common/StatCard";
-import { LivePositionsTable } from "@/components/features/portfolio/LivePositionsTable";
-import { PortfolioAllocationChart } from "@/components/features/portfolio/PortfolioAllocationChart";
-
-const PORTFOLIO_STATS = [
-  {
-    title: "Total Value",
-    value: 1_51_200,
-    prefix: "₹",
-    icon: <AccountBalanceWalletOutlinedIcon />,
-    iconColor: "#6366F1",
-  },
-  {
-    title: "Total P&L",
-    value: 17_250,
-    prefix: "+₹",
-    change: 12.89,
-    changeLabel: "unrealized",
-    icon: <TrendingUpIcon />,
-    iconColor: "#00D97E",
-  },
-  {
-    title: "Day P&L",
-    value: 3_912,
-    prefix: "+₹",
-    change: 2.66,
-    changeLabel: "today",
-    icon: <AutoGraphIcon />,
-    iconColor: "#38BDF8",
-  },
-  {
-    title: "Invested",
-    value: 1_33_950,
-    prefix: "₹",
-    icon: <AccountBalanceWalletOutlinedIcon />,
-    iconColor: "#F59E0B",
-  },
-];
+import Box            from "@mui/material/Box";
+import Card           from "@mui/material/Card";
+import Chip           from "@mui/material/Chip";
+import Grid           from "@mui/material/Grid";
+import Skeleton       from "@mui/material/Skeleton";
+import Tab            from "@mui/material/Tab";
+import Tabs           from "@mui/material/Tabs";
+import Typography     from "@mui/material/Typography";
+import { useState }                     from "react";
+import { PageHeader }                   from "@/components/common/PageHeader";
+import { StatCard }                     from "@/components/common/StatCard";
+import { LivePositionsTable }           from "@/components/features/portfolio/LivePositionsTable";
+import { PortfolioAllocationChart }     from "@/components/features/portfolio/PortfolioAllocationChart";
+import { PositionsTable }               from "@/components/features/portfolio/PositionsTable";
+import { useHoldings }                  from "@/hooks/usePortfolio";
 
 export default function PortfolioClient() {
+  const [tab, setTab] = useState<"holdings" | "positions">("holdings");
+  const { data: holdingsData, isLoading } = useHoldings();
+  const th = holdingsData?.totalholding;
+
+  const totalValue  = th?.totalholdingvalue    ?? 0;
+  const totalPnL    = th?.totalprofitandloss    ?? 0;
+  const pnlPct      = th?.totalpnlpercentage    ?? 0;
+  const invested    = th ? totalValue - totalPnL : 0;
+  const isUp        = totalPnL >= 0;
+
+  const STATS = [
+    {
+      title:    "Total Value",
+      value:    totalValue,
+      prefix:   "₹",
+      icon:     <AccountBalanceWalletOutlinedIcon />,
+      iconColor:"#6366F1",
+    },
+    {
+      title:       "Total P&L",
+      value:       Math.abs(totalPnL),
+      prefix:      isUp ? "+₹" : "-₹",
+      change:      pnlPct,
+      changeLabel: "unrealized",
+      icon:        <TrendingUpIcon />,
+      iconColor:   "#00D97E",
+    },
+    {
+      title:    "Invested",
+      value:    invested,
+      prefix:   "₹",
+      icon:     <AccountBalanceWalletOutlinedIcon />,
+      iconColor:"#F59E0B",
+    },
+    {
+      title:    "Holdings",
+      value:    holdingsData?.holdings?.filter((h) => h.quantity > 0).length ?? 0,
+      icon:     <AutoGraphIcon />,
+      iconColor:"#38BDF8",
+    },
+  ];
+
   return (
     <>
       <PageHeader
         title="Portfolio"
-        subtitle="Manage and monitor your positions"
+        subtitle="Manage and monitor your holdings and positions"
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Portfolio" }]}
       />
 
       {/* KPI strip */}
       <Grid container spacing={1.5} sx={{ mb: 2.5 }}>
-        {PORTFOLIO_STATS.map((s) => (
+        {STATS.map((s) => (
           <Grid key={s.title} size={{ xs: 12, sm: 6, md: 3 }}>
-            <StatCard {...s} />
+            {isLoading
+              ? <Skeleton variant="rounded" height={110} />
+              : <StatCard {...s} />}
           </Grid>
         ))}
       </Grid>
 
-      {/* Positions table + Allocation chart */}
+      {/* Table + Allocation chart */}
       <Grid container spacing={2}>
         <Grid size={{ xs: 12, lg: 8 }}>
           <Card sx={{ overflow: "hidden" }}>
-            {/* Header */}
+            {/* Tab header */}
             <Box
               sx={{
                 px: 2.5,
-                py: 2,
+                pt: 1.5,
+                borderBottom: "1px solid",
+                borderColor: "divider",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
-                borderBottom: "1px solid",
-                borderColor: "divider",
               }}
             >
-              <Box>
-                <Typography sx={{ fontSize: 14, fontWeight: 700 }}>Open Positions</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Live P&amp;L via Angel One SmartAPI
-                </Typography>
-              </Box>
-              <Chip
-                label="Live"
-                size="small"
-                icon={
-                  <Box
-                    component="span"
-                    sx={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: "50%",
-                      background: "#00D97E",
-                      display: "inline-block",
-                      animation: "pulse 1.5s ease-in-out infinite",
-                      "@keyframes pulse": {
-                        "0%,100%": { opacity: 1 },
-                        "50%": { opacity: 0.3 },
-                      },
-                      ml: "6px !important",
-                      mr: "-2px !important",
-                    }}
-                  />
-                }
+              <Tabs
+                value={tab}
+                onChange={(_, v) => setTab(v as typeof tab)}
                 sx={{
-                  height: 22,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  background: "rgba(0,217,126,0.12)",
-                  color: "#00D97E",
-                  border: "1px solid rgba(0,217,126,0.25)",
+                  minHeight: 36,
+                  "& .MuiTab-root": { minHeight: 36, fontSize: 13, fontWeight: 600, py: 0.5 },
                 }}
-              />
+              >
+                <Tab label="Holdings" value="holdings" />
+                <Tab label="Positions" value="positions" />
+              </Tabs>
+
+              {tab === "holdings" && (
+                <Chip
+                  label="Live"
+                  size="small"
+                  icon={
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 6, height: 6, borderRadius: "50%",
+                        background: "#00D97E", display: "inline-block",
+                        animation: "pulse 1.5s ease-in-out infinite",
+                        "@keyframes pulse": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } },
+                        ml: "6px !important", mr: "-2px !important",
+                      }}
+                    />
+                  }
+                  sx={{
+                    height: 22, fontSize: 10, fontWeight: 700,
+                    background: "rgba(0,217,126,0.12)",
+                    color: "#00D97E",
+                    border: "1px solid rgba(0,217,126,0.25)",
+                    mb: 0.5,
+                  }}
+                />
+              )}
+
+              {tab === "positions" && (
+                <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                  Intraday &amp; F&amp;O open positions
+                </Typography>
+              )}
             </Box>
 
-            {/* Live positions table */}
-            <LivePositionsTable />
+            {/* Tab panels */}
+            {tab === "holdings" && <LivePositionsTable />}
+            {tab === "positions" && <PositionsTable />}
           </Card>
         </Grid>
 

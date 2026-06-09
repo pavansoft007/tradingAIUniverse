@@ -15,16 +15,24 @@ import { NextRequest, NextResponse } from "next/server";
 
 const ANGEL_BASE = "https://apiconnect.angelone.in";
 
-const SMARTAPI_HEADERS: Record<string, string> = {
-  "Content-Type":   "application/json",
-  Accept:           "application/json",
-  "X-UserType":     "USER",
-  "X-SourceID":     "WEB",
-  "X-ClientLocalIP":"127.0.0.1",
+const SMARTAPI_STATIC_HEADERS: Record<string, string> = {
+  "Content-Type":    "application/json",
+  Accept:            "application/json",
+  "X-UserType":      "USER",
+  "X-SourceID":      "WEB",
+  "X-ClientLocalIP": "127.0.0.1",
   "X-ClientPublicIP":"127.0.0.1",
-  "X-MACAddress":   "00:00:00:00:00:00",
-  "X-PrivateKey":   process.env.NEXT_PUBLIC_ANGEL_ONE_API_KEY ?? "",
+  "X-MACAddress":    "00:00:00:00:00:00",
 };
+
+// Read the key per-request so hot restarts pick it up without a full rebuild.
+function getApiKey(): string {
+  return (
+    process.env.ANGEL_ONE_API_KEY ??
+    process.env.NEXT_PUBLIC_ANGEL_ONE_API_KEY ??
+    ""
+  );
+}
 
 async function proxyRequest(req: NextRequest, params: { path: string[] }) {
   const segments = params.path.join("/");
@@ -35,7 +43,8 @@ async function proxyRequest(req: NextRequest, params: { path: string[] }) {
   const authHeader = req.headers.get("authorization") ?? "";
 
   const upstreamHeaders: Record<string, string> = {
-    ...SMARTAPI_HEADERS,
+    ...SMARTAPI_STATIC_HEADERS,
+    "X-PrivateKey": getApiKey(),
     ...(authHeader ? { Authorization: authHeader } : {}),
   };
 

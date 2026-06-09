@@ -10,7 +10,11 @@
       "Bash(npm run *)",
       "Skill(claude-api)",
       "Skill(claude-api:*)",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(New-Item -Path \"d:\\\\tradingAIUniverse\\\\src\\\\hooks\\\\usePortfolio.ts\" -ItemType File -Force)",
+      "Bash(Out-Null)",
+      "PowerShell(New-Item -Path \"d:\\\\tradingAIUniverse\\\\src\\\\hooks\\\\usePortfolio.ts\" -ItemType File -Force)",
+      "PowerShell(New-Item -Path \"d:\\\\tradingAIUniverse\\\\src\\\\hooks\\\\useMarketQuote.ts\" -ItemType File -Force)"
     ]
   }
 }

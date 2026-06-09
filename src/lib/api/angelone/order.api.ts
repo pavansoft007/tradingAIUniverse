@@ -18,13 +18,15 @@ import type {
 } from "@/types/angel-order.types";
 
 const PATHS = {
-  placeOrder:  "/rest/secure/angelbroking/order/v1/placeOrder",
-  modifyOrder: "/rest/secure/angelbroking/order/v1/modifyOrder",
-  cancelOrder: "/rest/secure/angelbroking/order/v1/cancelOrder",
-  orderBook:   "/rest/secure/angelbroking/order/v1/list",
-  tradeBook:   "/rest/secure/angelbroking/order/v1/trades",
-  positions:   "/rest/secure/angelbroking/portfolio/v1/getPosition",
-  orderDetail: (id: string) => `/rest/secure/angelbroking/order/v1/details/${id}`,
+  placeOrder:      "/rest/secure/angelbroking/order/v1/placeOrder",
+  modifyOrder:     "/rest/secure/angelbroking/order/v1/modifyOrder",
+  cancelOrder:     "/rest/secure/angelbroking/order/v1/cancelOrder",
+  orderBook:       "/rest/secure/angelbroking/order/v1/list",
+  tradeBook:       "/rest/secure/angelbroking/order/v1/trades",
+  // Correct Angel One position endpoint (NOT /portfolio/v1/getPosition)
+  positions:       "/rest/secure/angelbroking/order/v1/getPosition",
+  convertPosition: "/rest/secure/angelbroking/order/v1/convertPosition",
+  orderDetail:     (id: string) => `/rest/secure/angelbroking/order/v1/details/${id}`,
 } as const;
 
 /** Throw a descriptive error when the Angel One `status: false` envelope is returned. */
@@ -106,19 +108,38 @@ export const orderApi = {
   },
 
   /**
-   * Fetch all open positions (intraday + delivery).
+   * Fetch all open positions (intraday + F&O).
+   * Angel One GET /order/v1/getPosition returns a flat array.
    */
-  async getPositions(): Promise<{ net: AngelPosition[]; day: AngelPosition[] }> {
+  async getPositions(): Promise<AngelPosition[]> {
     const { data } = await orderProxyClient.get<
-      AngelApiResponse<{ net: AngelPosition[] | null; day: AngelPosition[] | null } | null>
+      AngelApiResponse<AngelPosition[] | null>
     >(PATHS.positions);
     if (!data.status && data.errorcode !== "AB1006") {
       assertSuccess(data, "getPositions");
     }
-    return {
-      net: data.data?.net ?? [],
-      day: data.data?.day ?? [],
-    };
+    return data.data ?? [];
+  },
+
+  /**
+   * Convert a position from one product type to another
+   * (e.g. INTRADAY → DELIVERY before market close).
+   */
+  async convertPosition(payload: {
+    exchange:       string;
+    symboltoken:    string;
+    tradingsymbol:  string;
+    transactiontype:"BUY" | "SELL";
+    oldproducttype: string;
+    newproducttype: string;
+    quantity:       number;
+  }): Promise<boolean> {
+    const { data } = await orderProxyClient.post<AngelApiResponse<boolean | null>>(
+      PATHS.convertPosition,
+      payload,
+    );
+    assertSuccess(data, "convertPosition");
+    return data.data ?? true;
   },
 
   /**

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import TrendingUpIcon   from "@mui/icons-material/TrendingUp";
 import Box        from "@mui/material/Box";
 import Card       from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip       from "@mui/material/Chip";
+import CircularProgress from "@mui/material/CircularProgress";
 import Divider    from "@mui/material/Divider";
 import Grid       from "@mui/material/Grid";
 import Tab        from "@mui/material/Tab";
@@ -20,46 +21,40 @@ import { TradeBook }          from "@/components/features/trading/TradeBook";
 import { LivePositionsTable } from "@/components/features/portfolio/LivePositionsTable";
 import { PageHeader }         from "@/components/common/PageHeader";
 import { useTradingStore }    from "@/store/useTradingStore";
-import { useTicker }          from "@/hooks/useMarketData";
+import { useMarketQuote }     from "@/hooks/useMarketQuote";
+import type { AngelDepthLevel } from "@/types/angel-portfolio.types";
 
-// ── Market depth (bids/asks visualization) ────────────────────────────────────
+// ── Default trading symbol config ─────────────────────────────────────────────
 
-function generateDepth(ltp: number) {
-  const bids = Array.from({ length: 5 }, (_, i) => ({
-    price:  +(ltp - (i + 1) * 0.5).toFixed(2),
-    qty:    Math.floor(Math.random() * 8_000 + 500),
-    orders: Math.floor(Math.random() * 20 + 1),
-  }));
-  const asks = Array.from({ length: 5 }, (_, i) => ({
-    price:  +(ltp + (i + 1) * 0.5).toFixed(2),
-    qty:    Math.floor(Math.random() * 8_000 + 500),
-    orders: Math.floor(Math.random() * 20 + 1),
-  }));
-  return { bids, asks };
+const DEFAULT_TOKEN    = "2885";   // RELIANCE
+const DEFAULT_EXCHANGE = "NSE";
+
+// ── Market Depth with real Angel One data ─────────────────────────────────────
+
+interface MarketDepthProps {
+  ltp:      number;
+  bids?:    AngelDepthLevel[];
+  asks?:    AngelDepthLevel[];
+  loading?: boolean;
 }
 
-function MarketDepth({ ltp }: { ltp: number }) {
-  const theme = useTheme();
-  const { bids, asks } = generateDepth(ltp || 2_500);
-  const maxQty = Math.max(...bids.map((b) => b.qty), ...asks.map((a) => a.qty));
+function MarketDepth({ ltp, bids = [], asks = [], loading }: MarketDepthProps) {
+  const theme  = useTheme();
+  const maxQty = useMemo(
+    () => Math.max(...bids.map((b) => b.quantity), ...asks.map((a) => a.quantity), 1),
+    [bids, asks],
+  );
 
-  const Row = ({
-    price, qty, orders, side,
-  }: { price: number; qty: number; orders: number; side: "bid" | "ask" }) => {
+  const Row = ({ price, quantity, orders, side }: AngelDepthLevel & { side: "bid" | "ask" }) => {
     const color = side === "bid" ? theme.palette.success.main : theme.palette.error.main;
     return (
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.4, position: "relative" }}>
-        <Box sx={{
-          position: "absolute", right: 0, top: 0, bottom: 0,
-          width: `${(qty / maxQty) * 100}%`,
-          background: alpha(color, 0.06),
-          borderRadius: "3px",
-        }} />
+        <Box sx={{ position: "absolute", right: 0, top: 0, bottom: 0, width: `${(quantity / maxQty) * 100}%`, background: alpha(color, 0.06), borderRadius: "3px" }} />
         <Typography sx={{ fontSize: 12, color, fontFeatureSettings: '"tnum"', flex: 1, fontWeight: 500 }}>
           {price.toFixed(2)}
         </Typography>
         <Typography sx={{ fontSize: 12, color: "text.secondary", fontFeatureSettings: '"tnum"', textAlign: "right", minWidth: 70 }}>
-          {qty.toLocaleString()}
+          {quantity.toLocaleString()}
         </Typography>
         <Typography sx={{ fontSize: 11, color: "text.disabled", textAlign: "right", minWidth: 24 }}>
           {orders}
@@ -68,22 +63,30 @@ function MarketDepth({ ltp }: { ltp: number }) {
     );
   };
 
+  if (loading) {
+    return <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}><CircularProgress size={24} /></Box>;
+  }
+
+  const displayAsks = asks.length ? asks : [];
+  const displayBids = bids.length ? bids : [];
+
   return (
     <Box>
-      {[...asks].reverse().map((a) => <Row key={a.price} {...a} side="ask" />)}
+      {[...displayAsks].reverse().map((a, i) => <Row key={i} {...a} side="ask" />)}
 
-      <Box sx={{
-        display: "flex", alignItems: "center", justifyContent: "center",
-        py: 0.75, my: 0.5,
-        borderTop: "1px solid", borderBottom: "1px solid", borderColor: "divider",
-        background: alpha(theme.palette.primary.main, 0.06), borderRadius: "6px",
-      }}>
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", py: 0.75, my: 0.5, borderTop: "1px solid", borderBottom: "1px solid", borderColor: "divider", background: alpha(theme.palette.primary.main, 0.06), borderRadius: "6px" }}>
         <Typography sx={{ fontSize: 14, fontWeight: 800, color: "primary.main", fontFeatureSettings: '"tnum"' }}>
-          ₹{ltp?.toFixed(2) ?? "—"}
+          ₹{ltp.toFixed(2)}
         </Typography>
       </Box>
 
-      {bids.map((b) => <Row key={b.price} {...b} side="bid" />)}
+      {displayBids.map((b, i) => <Row key={i} {...b} side="bid" />)}
+
+      {!displayBids.length && !displayAsks.length && (
+        <Typography sx={{ fontSize: 12, color: "text.secondary", textAlign: "center", py: 2 }}>
+          Log in to see live depth
+        </Typography>
+      )}
 
       <Box sx={{ display: "flex", gap: 1, pt: 1, mt: 0.5, borderTop: "1px solid", borderColor: "divider" }}>
         {["Price", "Qty", "Ord"].map((h) => (
@@ -101,15 +104,31 @@ function MarketDepth({ ltp }: { ltp: number }) {
 export default function TradingClient() {
   const theme = useTheme();
   const { selectedSymbol } = useTradingStore();
-  const { data } = useTicker(selectedSymbol);
-  const ticker   = data?.data;
-  const ltp      = ticker?.price ?? 2_710;
-  const change   = 34.5;
-  const changePct = 1.29;
-  const isUp     = change >= 0;
+  const [tab, setTab] = useState(0);
+
+  // Use the selected symbol token from store, defaulting to RELIANCE
+  const symbolToken = DEFAULT_TOKEN;
+  const exchange    = DEFAULT_EXCHANGE;
+
+  const { quote, isLoading: quoteLoading } = useMarketQuote(symbolToken, exchange);
+
+  const ltp       = quote?.ltp       ?? 0;
+  const open      = quote?.open      ?? 0;
+  const high      = quote?.high      ?? 0;
+  const low       = quote?.low       ?? 0;
+  const prevClose = quote?.close     ?? 0;
+  const volume    = quote?.volume    ?? 0;
+  const change    = prevClose > 0 ? ltp - prevClose : 0;
+  const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+  const isUp      = change >= 0;
   const changeColor = isUp ? theme.palette.success.main : theme.palette.error.main;
 
-  const [tab, setTab] = useState(0);
+  const displaySymbol = selectedSymbol || "RELIANCE";
+
+  const fmtVol = (v: number) =>
+    v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}M`
+    : v >= 1_000   ? `${(v / 1_000).toFixed(0)}K`
+    : v.toString();
 
   return (
     <>
@@ -125,37 +144,43 @@ export default function TradingClient() {
           <Box sx={{ display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}>
             <Box>
               <Typography sx={{ fontSize: 18, fontWeight: 800, fontFamily: "monospace", letterSpacing: "0.02em" }}>
-                {selectedSymbol || "RELIANCE"}
+                {displaySymbol}
               </Typography>
-              <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>NSE · Equity</Typography>
+              <Typography sx={{ fontSize: 11.5, color: "text.secondary" }}>{exchange} · Equity</Typography>
             </Box>
 
             <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
 
-            <Typography sx={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", fontFeatureSettings: '"tnum"' }}>
-              ₹{ltp.toLocaleString("en-IN")}
-            </Typography>
-
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-              {isUp
-                ? <TrendingUpIcon   sx={{ fontSize: 18, color: changeColor }} />
-                : <TrendingDownIcon sx={{ fontSize: 18, color: changeColor }} />}
-              <Typography sx={{ fontSize: 15, fontWeight: 700, color: changeColor, fontFeatureSettings: '"tnum"' }}>
-                {isUp ? "+" : ""}₹{Math.abs(change).toFixed(2)}
+            {quoteLoading && ltp === 0 ? (
+              <CircularProgress size={20} />
+            ) : (
+              <Typography sx={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em", fontFeatureSettings: '"tnum"' }}>
+                ₹{ltp > 0 ? ltp.toLocaleString("en-IN", { minimumFractionDigits: 2 }) : "—"}
               </Typography>
-              <Chip
-                label={`${isUp ? "+" : ""}${changePct.toFixed(2)}%`}
-                size="small"
-                sx={{ height: 22, fontSize: 11.5, fontWeight: 700, background: alpha(changeColor, 0.12), color: changeColor, border: `1px solid ${alpha(changeColor, 0.25)}` }}
-              />
-            </Box>
+            )}
+
+            {ltp > 0 && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                {isUp
+                  ? <TrendingUpIcon   sx={{ fontSize: 18, color: changeColor }} />
+                  : <TrendingDownIcon sx={{ fontSize: 18, color: changeColor }} />}
+                <Typography sx={{ fontSize: 15, fontWeight: 700, color: changeColor, fontFeatureSettings: '"tnum"' }}>
+                  {isUp ? "+" : ""}₹{Math.abs(change).toFixed(2)}
+                </Typography>
+                <Chip
+                  label={`${isUp ? "+" : ""}${changePct.toFixed(2)}%`}
+                  size="small"
+                  sx={{ height: 22, fontSize: 11.5, fontWeight: 700, background: alpha(changeColor, 0.12), color: changeColor, border: `1px solid ${alpha(changeColor, 0.25)}` }}
+                />
+              </Box>
+            )}
 
             <Box sx={{ display: "flex", gap: 3, ml: "auto" }}>
               {[
-                { label: "Open", value: "2,684.20" },
-                { label: "High", value: "2,722.50" },
-                { label: "Low",  value: "2,678.90" },
-                { label: "Vol",  value: "4.2M" },
+                { label: "Open",  value: open  > 0 ? open.toLocaleString("en-IN")  : "—" },
+                { label: "High",  value: high  > 0 ? high.toLocaleString("en-IN")  : "—" },
+                { label: "Low",   value: low   > 0 ? low.toLocaleString("en-IN")   : "—" },
+                { label: "Vol",   value: volume > 0 ? fmtVol(volume)               : "—" },
               ].map((item) => (
                 <Box key={item.label} sx={{ textAlign: "right" }}>
                   <Typography sx={{ fontSize: 10.5, color: "text.secondary", textTransform: "uppercase", letterSpacing: "0.05em" }}>
@@ -172,47 +197,47 @@ export default function TradingClient() {
       </Card>
 
       <Grid container spacing={2}>
-        {/* Order Panel (left) */}
+        {/* Order Panel */}
         <Grid size={{ xs: 12, md: 3 }}>
           <Card sx={{ height: 580, display: "flex", flexDirection: "column" }}>
             <OrderPanel
-              symbol={selectedSymbol || "RELIANCE-EQ"}
-              symboltoken="2885"
-              exchange="NSE"
+              symbol={`${displaySymbol}-EQ`}
+              symboltoken={symbolToken}
+              exchange={exchange}
               ltp={ltp}
             />
           </Card>
         </Grid>
 
-        {/* Market Depth (center-left) */}
+        {/* Market Depth (real) */}
         <Grid size={{ xs: 12, md: 2 }}>
           <Card sx={{ height: 580 }}>
             <CardContent sx={{ p: "16px !important" }}>
               <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 1.5 }}>Market Depth</Typography>
-              <MarketDepth ltp={ltp} />
+              <MarketDepth
+                ltp={ltp}
+                bids={quote?.depth?.buy  ?? []}
+                asks={quote?.depth?.sell ?? []}
+                loading={quoteLoading && !quote}
+              />
             </CardContent>
           </Card>
         </Grid>
 
-        {/* Order Book / Trade Book / Positions (right) */}
+        {/* Order Book / Trade Book / Positions */}
         <Grid size={{ xs: 12, md: 7 }}>
           <Card sx={{ height: 580, display: "flex", flexDirection: "column" }}>
             <Box sx={{ borderBottom: "1px solid", borderColor: "divider" }}>
               <Tabs
                 value={tab}
                 onChange={(_, v) => setTab(v)}
-                sx={{
-                  minHeight: 44,
-                  px: 1,
-                  "& .MuiTab-root": { minHeight: 44, fontSize: 13, fontWeight: 600, textTransform: "none" },
-                }}
+                sx={{ minHeight: 44, px: 1, "& .MuiTab-root": { minHeight: 44, fontSize: 13, fontWeight: 600, textTransform: "none" } }}
               >
                 <Tab label="Order Book" />
                 <Tab label="Trade Book" />
-                <Tab label="Positions" />
+                <Tab label="Holdings" />
               </Tabs>
             </Box>
-
             <Box sx={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
               {tab === 0 && <OrderBook />}
               {tab === 1 && <TradeBook />}

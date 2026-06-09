@@ -44,17 +44,18 @@ export function createSmartApiClient(): AxiosInstance {
       Accept: "application/json",
       "X-UserType": "USER",
       "X-SourceID": "WEB",
-      // In a browser we cannot get real IPs; placeholders satisfy the API schema.
       "X-ClientLocalIP": "127.0.0.1",
       "X-ClientPublicIP": "127.0.0.1",
       "X-MACAddress": "00:00:00:00:00:00",
-      "X-PrivateKey": process.env.NEXT_PUBLIC_ANGEL_ONE_API_KEY ?? "",
+      // X-PrivateKey is injected per-request in the interceptor below
     },
   });
 
-  // ── Request: inject JWT ───────────────────────────────────────────────────
+  // ── Request: inject API key + JWT ────────────────────────────────────────
   client.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
+      // Read per-request so env var changes are always picked up
+      config.headers["X-PrivateKey"] = process.env.NEXT_PUBLIC_ANGEL_ONE_API_KEY ?? "";
       const token = sessionUtil.loadJWT();
       if (token) {
         config.headers.Authorization = `Bearer ${stripBearerPrefix(token)}`;
