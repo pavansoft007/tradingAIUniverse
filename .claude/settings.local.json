@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd D:/pro/tradingAIUniverse && npm install 2>&1)",
+      "Bash(cd D:/pro/tradingAIUniverse && npm install next@latest 2>&1)",
+      "Bash(cd D:/pro/tradingAIUniverse && npx tsc --noEmit 2>&1)"
+    ]
+  }
+}
