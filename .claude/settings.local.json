@@ -3,7 +3,14 @@
     "allow": [
       "Bash(cd D:/pro/tradingAIUniverse && npm install 2>&1)",
       "Bash(cd D:/pro/tradingAIUniverse && npm install next@latest 2>&1)",
-      "Bash(cd D:/pro/tradingAIUniverse && npx tsc --noEmit 2>&1)"
+      "Bash(cd D:/pro/tradingAIUniverse && npx tsc --noEmit 2>&1)",
+      "Bash(Get-ChildItem -Path \"d:\\\\tradingAIUniverse\\\\src\\\\nextjs_TS\\\\src\" -Recurse -Name)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "Bash(npx next *)"
     ]
   }
 }

@@ -1,6 +1,8 @@
 "use client";
 
 import AddIcon from "@mui/icons-material/Add";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
 import TrendingFlatIcon from "@mui/icons-material/TrendingFlat";
@@ -26,7 +28,7 @@ import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ConnectionStatus } from "@/components/features/market/ConnectionStatus";
 import { PriceCell } from "@/components/features/market/PriceCell";
 import { useConnectionStatus, useWatchlistActions, useWatchlistTicks } from "@/hooks/useMarketWatch";
@@ -43,6 +45,67 @@ function fmtVolume(v: number) {
   if (v >= 10_000_000) return `${(v / 10_000_000).toFixed(2)} Cr`;
   if (v >= 100_000)    return `${(v / 100_000).toFixed(2)} L`;
   return v.toLocaleString("en-IN");
+}
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+
+type SortField = "symbol" | "ltp" | "change" | "volume";
+type SortDir   = "asc" | "desc";
+
+function SortableHeader({
+  field,
+  label,
+  sortField,
+  sortDir,
+  onSort,
+  align = "left",
+  minWidth,
+  hidden,
+}: {
+  field: SortField;
+  label: string;
+  sortField: SortField;
+  sortDir: SortDir;
+  onSort: (f: SortField) => void;
+  align?: "left" | "right";
+  minWidth?: number;
+  hidden?: boolean;
+}) {
+  const active = field === sortField;
+  const SortIcon = sortDir === "asc" ? ArrowUpwardIcon : ArrowDownwardIcon;
+
+  return (
+    <TableCell
+      align={align}
+      onClick={() => onSort(field)}
+      sx={{
+        fontWeight: 700,
+        minWidth:
+          minWidth ??
+          (field === "symbol" ? 120 : field === "change" ? 140 : 90),
+        cursor: "pointer",
+        userSelect: "none",
+        "&:hover": { bgcolor: "action.hover" },
+        ...(hidden && { display: { xs: "none", lg: "table-cell" } }),
+      }}
+    >
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 0.25,
+          justifyContent: align === "right" ? "flex-end" : "flex-start",
+        }}
+      >
+        {label}
+        {active ? (
+          <SortIcon sx={{ fontSize: 13, color: "text.secondary" }} />
+        ) : (
+          <Box sx={{ width: 13 }} />
+        )}
+      </Box>
+    </TableCell>
+  );
 }
 
 // ── Row ───────────────────────────────────────────────────────────────────────
@@ -141,7 +204,11 @@ function WatchRow({ item, tick, onRemove }: WatchRowProps) {
       {/* Remove */}
       <TableCell align="center" sx={{ width: 40, pr: 1 }}>
         <Tooltip title="Remove from watchlist">
-          <IconButton size="small" onClick={() => onRemove(item.token)} sx={{ opacity: 0.5, "&:hover": { opacity: 1, color: "error.main" } }}>
+          <IconButton
+            size="small"
+            onClick={() => onRemove(item.token)}
+            sx={{ opacity: 0.5, "&:hover": { opacity: 1, color: "error.main" } }}
+          >
             <DeleteOutlineIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -169,15 +236,22 @@ function AddTokenDialog({
 
   const handleAdd = () => {
     if (!symbol.trim() || !token.trim()) return;
-    onAdd({ symbol: symbol.trim().toUpperCase(), token: token.trim(), exchangeType: Number(exchange) as WatchlistItem["exchangeType"] });
-    setSymbol(""); setToken("");
+    onAdd({
+      symbol:       symbol.trim().toUpperCase(),
+      token:        token.trim(),
+      exchangeType: Number(exchange) as WatchlistItem["exchangeType"],
+    });
+    setSymbol("");
+    setToken("");
     onClose();
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Add to Watchlist</DialogTitle>
-      <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "12px !important" }}>
+      <DialogContent
+        sx={{ display: "flex", flexDirection: "column", gap: 2, pt: "12px !important" }}
+      >
         <TextField
           label="Symbol"
           placeholder="e.g. RELIANCE"
@@ -208,7 +282,11 @@ function AddTokenDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleAdd} disabled={!symbol.trim() || !token.trim()}>
+        <Button
+          variant="contained"
+          onClick={handleAdd}
+          disabled={!symbol.trim() || !token.trim()}
+        >
           Add
         </Button>
       </DialogActions>
@@ -218,20 +296,85 @@ function AddTokenDialog({
 
 // ── Main table ────────────────────────────────────────────────────────────────
 
+const tickKey = (exchangeType: number, token: string) => `${exchangeType}_${token}`;
+
 export function MarketWatchTable() {
-  const [addOpen, setAddOpen] = useState(false);
-  const connectionStatus = useConnectionStatus();
-  const { watchlist, ticks } = useWatchlistTicks(WS_MODE.QUOTE);
+  const [addOpen, setAddOpen]     = useState(false);
+  const [sortField, setSortField] = useState<SortField>("symbol");
+  const [sortDir, setSortDir]     = useState<SortDir>("asc");
+
+  const connectionStatus                    = useConnectionStatus();
+  const { watchlist, ticks }                = useWatchlistTicks(WS_MODE.QUOTE);
   const { addToWatchlist, removeFromWatchlist } = useWatchlistActions();
 
-  const tickKey = (exchangeType: number, token: string) => `${exchangeType}_${token}`;
+  const handleSort = (field: SortField) => {
+    if (field === sortField) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDir("asc");
+    }
+  };
+
+  const sortedWatchlist = useMemo(() => {
+    return [...watchlist].sort((a, b) => {
+      const ta = ticks[tickKey(a.exchangeType, a.token)];
+      const tb = ticks[tickKey(b.exchangeType, b.token)];
+
+      if (sortField === "symbol") {
+        const cmp = a.symbol.localeCompare(b.symbol);
+        return sortDir === "asc" ? cmp : -cmp;
+      }
+
+      let va = 0;
+      let vb = 0;
+      if (sortField === "ltp") {
+        va = ta?.ltp ?? 0;
+        vb = tb?.ltp ?? 0;
+      } else if (sortField === "change") {
+        va = ta?.close ? ((ta.ltp - ta.close) / ta.close) * 100 : 0;
+        vb = tb?.close ? ((tb.ltp - tb.close) / tb.close) * 100 : 0;
+      } else if (sortField === "volume") {
+        va = ta?.volumeTradedToday ?? 0;
+        vb = tb?.volumeTradedToday ?? 0;
+      }
+      return sortDir === "asc" ? va - vb : vb - va;
+    });
+  }, [watchlist, ticks, sortField, sortDir]);
+
+  // Market breadth
+  const breadth = useMemo(() => {
+    return watchlist.reduce(
+      (acc, item) => {
+        const tick = ticks[tickKey(item.exchangeType, item.token)];
+        if (!tick?.close || tick.close === 0) return acc;
+        const change = tick.ltp - tick.close;
+        if (change > 0) acc.gainers++;
+        else if (change < 0) acc.losers++;
+        else acc.unchanged++;
+        return acc;
+      },
+      { gainers: 0, losers: 0, unchanged: 0 },
+    );
+  }, [watchlist, ticks]);
+
+  const breadthTotal = breadth.gainers + breadth.losers + breadth.unchanged;
 
   return (
     <Box>
       {/* Header */}
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          mb: 1.5,
+        }}
+      >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography variant="h6" fontWeight={700}>Market Watch</Typography>
+          <Typography variant="h6" fontWeight={700}>
+            Market Watch
+          </Typography>
           <ConnectionStatus status={connectionStatus} />
         </Box>
         <Button
@@ -244,18 +387,150 @@ export function MarketWatchTable() {
         </Button>
       </Box>
 
+      {/* Market breadth bar */}
+      {breadthTotal > 0 && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            mb: 1.5,
+            px: 1.5,
+            py: 0.75,
+            borderRadius: 1,
+            bgcolor: "action.hover",
+            flexWrap: "wrap",
+          }}
+        >
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <TrendingUpIcon sx={{ fontSize: 13, color: "success.main" }} />
+            <Typography variant="caption" fontWeight={700} color="success.main">
+              {breadth.gainers}
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <TrendingDownIcon sx={{ fontSize: 13, color: "error.main" }} />
+            <Typography variant="caption" fontWeight={700} color="error.main">
+              {breadth.losers}
+            </Typography>
+          </Box>
+          {breadth.unchanged > 0 && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              <TrendingFlatIcon sx={{ fontSize: 13, color: "text.secondary" }} />
+              <Typography variant="caption" fontWeight={700} color="text.secondary">
+                {breadth.unchanged}
+              </Typography>
+            </Box>
+          )}
+          <Box
+            sx={{
+              flex: 1,
+              minWidth: 80,
+              height: 5,
+              borderRadius: 3,
+              overflow: "hidden",
+              bgcolor: "divider",
+              display: "flex",
+            }}
+          >
+            {breadth.gainers > 0 && (
+              <Box
+                sx={{
+                  width: `${(breadth.gainers / breadthTotal) * 100}%`,
+                  bgcolor: "success.main",
+                }}
+              />
+            )}
+            {breadth.unchanged > 0 && (
+              <Box
+                sx={{
+                  width: `${(breadth.unchanged / breadthTotal) * 100}%`,
+                  bgcolor: "grey.500",
+                }}
+              />
+            )}
+            {breadth.losers > 0 && (
+              <Box
+                sx={{
+                  width: `${(breadth.losers / breadthTotal) * 100}%`,
+                  bgcolor: "error.main",
+                }}
+              />
+            )}
+          </Box>
+          <Typography variant="caption" color="text.disabled">
+            {breadthTotal} tracked
+          </Typography>
+        </Box>
+      )}
+
       {/* Table */}
       <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ fontWeight: 700, minWidth: 120 }}>Symbol</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 700, minWidth: 110 }}>LTP</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 700, minWidth: 140 }}>Change</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 700, minWidth: 90 }}>Volume</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 700, minWidth: 90, display: { xs: "none", lg: "table-cell" } }}>Open</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 700, minWidth: 90, display: { xs: "none", lg: "table-cell" } }}>High</TableCell>
-              <TableCell align="right" sx={{ fontWeight: 700, minWidth: 90, display: { xs: "none", lg: "table-cell" } }}>Low</TableCell>
+              <SortableHeader
+                field="symbol"
+                label="Symbol"
+                sortField={sortField}
+                sortDir={sortDir}
+                onSort={handleSort}
+              />
+              <SortableHeader
+                field="ltp"
+                label="LTP"
+                sortField={sortField}
+                sortDir={sortDir}
+                onSort={handleSort}
+                align="right"
+                minWidth={110}
+              />
+              <SortableHeader
+                field="change"
+                label="Change"
+                sortField={sortField}
+                sortDir={sortDir}
+                onSort={handleSort}
+                align="right"
+              />
+              <SortableHeader
+                field="volume"
+                label="Volume"
+                sortField={sortField}
+                sortDir={sortDir}
+                onSort={handleSort}
+                align="right"
+              />
+              <TableCell
+                align="right"
+                sx={{
+                  fontWeight: 700,
+                  minWidth: 90,
+                  display: { xs: "none", lg: "table-cell" },
+                }}
+              >
+                Open
+              </TableCell>
+              <TableCell
+                align="right"
+                sx={{
+                  fontWeight: 700,
+                  minWidth: 90,
+                  display: { xs: "none", lg: "table-cell" },
+                }}
+              >
+                High
+              </TableCell>
+              <TableCell
+                align="right"
+                sx={{
+                  fontWeight: 700,
+                  minWidth: 90,
+                  display: { xs: "none", lg: "table-cell" },
+                }}
+              >
+                Low
+              </TableCell>
               <TableCell sx={{ width: 40 }} />
             </TableRow>
           </TableHead>
@@ -264,13 +539,19 @@ export function MarketWatchTable() {
               <TableRow>
                 <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                   <CircularProgress size={24} sx={{ mr: 1.5 }} />
-                  <Typography variant="body2" color="text.secondary" component="span">
-                    {connectionStatus === "reconnecting" ? "Reconnecting to feed…" : "Connecting to live feed…"}
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    component="span"
+                  >
+                    {connectionStatus === "reconnecting"
+                      ? "Reconnecting to feed…"
+                      : "Connecting to live feed…"}
                   </Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              watchlist.map((item) => (
+              sortedWatchlist.map((item) => (
                 <WatchRow
                   key={item.token}
                   item={item}

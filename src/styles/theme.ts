@@ -26,14 +26,14 @@ export const darkTheme = createTheme({
     success: { main: "#00D97E", light: "#34EFA0", dark: "#00B868" },
     info: { main: "#38BDF8", light: "#7DD3FC", dark: "#0EA5E9" },
     background: {
-      default: "#05080F",
-      paper: "#0C1220",
+      default: "#161C24",
+      paper: "#212B36",
     },
     text: {
-      primary: "#E2E8F0",
-      secondary: "#64748B",
+      primary: "#FFFFFF",
+      secondary: "#919EAB",
     },
-    divider: "rgba(255,255,255,0.06)",
+    divider: "rgba(145,158,171,0.24)",
   },
   typography: baseTypography,
   shape: { borderRadius: 10 },
@@ -50,11 +50,10 @@ export const darkTheme = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          background: "rgba(12,18,32,0.85)",
-          backdropFilter: "blur(16px)",
-          border: "1px solid rgba(255,255,255,0.07)",
-          borderRadius: 14,
-          boxShadow: "none",
+          background: "#212B36",
+          backgroundImage: "none",
+          boxShadow: "0 0 2px 0 rgba(145,158,171,0.2), 0 12px 24px -4px rgba(145,158,171,0.12)",
+          borderRadius: 16,
         },
       },
     },
@@ -62,7 +61,6 @@ export const darkTheme = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: "none",
-          border: "1px solid rgba(255,255,255,0.06)",
           borderRadius: 12,
         },
       },
@@ -164,18 +162,13 @@ export const darkTheme = createTheme({
     },
     MuiDrawer: {
       styleOverrides: {
-        paper: {
-          background: "#070C18",
-          borderRight: "1px solid rgba(255,255,255,0.06)",
-        },
+        paper: { backgroundImage: "none" },
       },
     },
     MuiAppBar: {
       styleOverrides: {
         root: {
-          background: "rgba(5,8,15,0.85)",
-          backdropFilter: "blur(20px)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          backgroundImage: "none",
           boxShadow: "none",
         },
       },
@@ -228,9 +221,9 @@ export const lightTheme = createTheme({
     warning: { main: "#D97706", light: "#F59E0B", dark: "#B45309" },
     success: { main: "#059669", light: "#10B981", dark: "#047857" },
     info: { main: "#0284C7", light: "#38BDF8", dark: "#0369A1" },
-    background: { default: "#F0F4FF", paper: "#FFFFFF" },
-    text: { primary: "#0F172A", secondary: "#64748B" },
-    divider: "rgba(0,0,0,0.07)",
+    background: { default: "#F4F6F8", paper: "#FFFFFF" },
+    text: { primary: "#212B36", secondary: "#637381" },
+    divider: "rgba(145,158,171,0.24)",
   },
   typography: baseTypography,
   shape: { borderRadius: 10 },
@@ -248,9 +241,9 @@ export const lightTheme = createTheme({
       styleOverrides: {
         root: {
           background: "#FFFFFF",
-          border: "1px solid rgba(0,0,0,0.07)",
-          borderRadius: 14,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(99,102,241,0.04)",
+          backgroundImage: "none",
+          boxShadow: "0 0 2px 0 rgba(145,158,171,0.2), 0 12px 24px -4px rgba(145,158,171,0.12)",
+          borderRadius: 16,
         },
       },
     },
@@ -258,9 +251,8 @@ export const lightTheme = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: "none",
-          border: "1px solid rgba(0,0,0,0.06)",
           borderRadius: 12,
-          boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+          boxShadow: "0 0 2px 0 rgba(145,158,171,0.2), 0 12px 24px -4px rgba(145,158,171,0.12)",
         },
       },
     },

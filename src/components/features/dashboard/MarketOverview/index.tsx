@@ -9,6 +9,7 @@ import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import { useTickers } from "@/hooks/useMarketData";
+import { MOCK_TICKERS } from "@/lib/mock/market.mock";
 
 function TickerRow({ symbol, name, price, changePercent }: { symbol: string; name: string; price: number; changePercent: number }) {
   const isUp = changePercent >= 0;
@@ -22,7 +23,8 @@ function TickerRow({ symbol, name, price, changePercent }: { symbol: string; nam
         alignItems: "center",
         px: 2.5,
         py: 1.5,
-        borderBottom: "1px solid rgba(255,255,255,0.04)",
+        borderBottom: "1px solid",
+        borderColor: "divider",
         "&:last-child": { borderBottom: "none" },
         "&:hover": { background: "rgba(255,255,255,0.02)", cursor: "pointer" },
         transition: "background 0.15s",
@@ -77,7 +79,7 @@ function TickerRow({ symbol, name, price, changePercent }: { symbol: string; nam
 
 export function MarketOverview() {
   const { data, isLoading } = useTickers();
-  const tickers = data?.data ?? [];
+  const tickers = data?.data ?? MOCK_TICKERS;
 
   return (
     <Card sx={{ height: "100%" }}>
@@ -89,7 +91,8 @@ export function MarketOverview() {
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid",
+          borderColor: "divider",
         }}
       >
         <Typography sx={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em" }}>

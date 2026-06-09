@@ -9,6 +9,8 @@ import Grid from "@mui/material/Grid";
 import Typography from "@mui/material/Typography";
 import { AISignalsList } from "@/components/features/dashboard/AISignalsList";
 import { MarketOverview } from "@/components/features/dashboard/MarketOverview";
+import { PortfolioPerformanceChart } from "@/components/features/dashboard/PortfolioPerformanceChart";
+import { SectorAllocationChart } from "@/components/features/dashboard/SectorAllocationChart";
 import { StatCard } from "@/components/common/StatCard";
 import { useAngelOneSession } from "@/hooks/useAngelOneAuth";
 
@@ -56,7 +58,7 @@ export default function DashboardClient() {
   return (
     <>
       {/* Hero greeting */}
-      <Box sx={{ mb: 3.5 }}>
+      <Box sx={{ mb: 2.5 }}>
         <Typography
           sx={{
             fontSize: { xs: 22, sm: 28 },
@@ -79,16 +81,26 @@ export default function DashboardClient() {
       </Box>
 
       {/* KPI strip */}
-      <Grid container spacing={2} sx={{ mb: 3 }}>
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
         {STATS.map((s) => (
-          <Grid key={s.title} size={{ xs: 12, sm: 6, xl: 3 }}>
+          <Grid key={s.title} size={{ xs: 12, sm: 6, lg: 3 }}>
             <StatCard {...s} />
           </Grid>
         ))}
       </Grid>
 
-      {/* Main content */}
-      <Grid container spacing={2}>
+      {/* Performance chart + Sector allocation */}
+      <Grid container spacing={1.5} sx={{ mb: 2 }}>
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <PortfolioPerformanceChart />
+        </Grid>
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <SectorAllocationChart />
+        </Grid>
+      </Grid>
+
+      {/* Market overview + AI signals */}
+      <Grid container spacing={1.5}>
         <Grid size={{ xs: 12, lg: 8 }}>
           <MarketOverview />
         </Grid>

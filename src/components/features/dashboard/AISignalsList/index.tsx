@@ -12,6 +12,7 @@ import LinearProgress from "@mui/material/LinearProgress";
 import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import { useAISignals } from "@/hooks/useMarketData";
+import { MOCK_SIGNALS } from "@/lib/mock/market.mock";
 
 const SIGNAL_CONFIG = {
   buy:  { label: "BUY",  color: "#00D97E", bg: "rgba(0,217,126,0.12)",  border: "rgba(0,217,126,0.25)",  Icon: TrendingUpIcon },
@@ -21,7 +22,7 @@ const SIGNAL_CONFIG = {
 
 export function AISignalsList() {
   const { data, isLoading } = useAISignals();
-  const signals = data?.data ?? [];
+  const signals = data?.data ?? MOCK_SIGNALS;
 
   return (
     <Card sx={{ height: "100%" }}>

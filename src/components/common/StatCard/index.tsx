@@ -88,17 +88,17 @@ export function StatCard({
         },
       }}
     >
-      <CardContent sx={{ p: "20px !important" }}>
+      <CardContent sx={{ p: "16px !important" }}>
         {loading ? (
           <>
-            <Skeleton width={100} height={16} sx={{ mb: 1.5 }} />
-            <Skeleton width="65%" height={36} sx={{ mb: 1 }} />
-            <Skeleton width="45%" height={16} />
+            <Skeleton width={100} height={14} sx={{ mb: 1 }} />
+            <Skeleton width="65%" height={30} sx={{ mb: 0.75 }} />
+            <Skeleton width="45%" height={14} />
           </>
         ) : (
           <>
             {/* Top row: label + icon */}
-            <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 2 }}>
+            <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 1.5 }}>
               <Typography
                 sx={{
                   fontSize: 11.5,
@@ -113,9 +113,9 @@ export function StatCard({
               {icon && (
                 <Box
                   sx={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: "10px",
+                    width: 32,
+                    height: 32,
+                    borderRadius: "9px",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -123,7 +123,7 @@ export function StatCard({
                     border: `1px solid ${iconColor}33`,
                     color: iconColor,
                     boxShadow: `0 0 14px ${iconColor}22`,
-                    "& svg": { fontSize: 18 },
+                    "& svg": { fontSize: 16 },
                   }}
                 >
                   {icon}
@@ -134,7 +134,7 @@ export function StatCard({
             {/* Value */}
             <Typography
               sx={{
-                fontSize: 26,
+                fontSize: 22,
                 fontWeight: 800,
                 letterSpacing: "-0.03em",
                 lineHeight: 1,
@@ -149,7 +149,7 @@ export function StatCard({
             </Typography>
 
             {/* Sparkline + change */}
-            <Box sx={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", mt: 1.5 }}>
+            <Box sx={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", mt: 1 }}>
               {hasChange && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                   <Box

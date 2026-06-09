@@ -18,6 +18,12 @@ interface LiveTickerProps {
   mode?: WsMode;
 }
 
+function fmtVol(v: number) {
+  if (v >= 10_000_000) return `${(v / 10_000_000).toFixed(2)} Cr`;
+  if (v >= 100_000)    return `${(v / 100_000).toFixed(2)} L`;
+  return v.toLocaleString("en-IN");
+}
+
 export function LiveTicker({ symbol, token, exchangeType, mode }: LiveTickerProps) {
   const tick = useTickData(token, exchangeType, mode);
 
@@ -32,6 +38,21 @@ export function LiveTicker({ symbol, token, exchangeType, mode }: LiveTickerProp
 
   const isUp = (change ?? 0) >= 0;
 
+  // Position of LTP within today's H/L range (clamped 2–98%)
+  const rangePos =
+    tick?.high !== undefined &&
+    tick?.low !== undefined &&
+    tick?.ltp !== undefined &&
+    tick.high !== tick.low
+      ? Math.min(
+          Math.max(
+            Math.round(((tick.ltp - tick.low) / (tick.high - tick.low)) * 100),
+            2,
+          ),
+          98,
+        )
+      : undefined;
+
   return (
     <Box
       sx={{
@@ -43,9 +64,18 @@ export function LiveTicker({ symbol, token, exchangeType, mode }: LiveTickerProp
         borderColor: "divider",
         bgcolor: "background.paper",
         minWidth: 140,
+        height: "100%",
       }}
     >
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 0.5 }}>
+      {/* Symbol + exchange */}
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          mb: 0.5,
+        }}
+      >
         <Typography variant="caption" fontWeight={700} color="text.primary">
           {symbol}
         </Typography>
@@ -57,6 +87,8 @@ export function LiveTicker({ symbol, token, exchangeType, mode }: LiveTickerProp
       {tick ? (
         <>
           <PriceCell price={tick.ltp} prevClose={tick.close} align="left" />
+
+          {/* Change row */}
           {change !== undefined && changePct !== undefined && (
             <Tooltip title="Change vs. prev. close" placement="bottom">
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.25, mt: 0.25 }}>
@@ -77,11 +109,60 @@ export function LiveTicker({ symbol, token, exchangeType, mode }: LiveTickerProp
               </Box>
             </Tooltip>
           )}
+
+          {/* Day H/L range bar */}
+          {rangePos !== undefined && tick.low !== undefined && tick.high !== undefined && (
+            <Box sx={{ mt: 1 }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.3 }}>
+                <Typography sx={{ fontSize: 9, color: "text.disabled" }}>
+                  L {tick.low.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </Typography>
+                <Typography sx={{ fontSize: 9, color: "text.disabled" }}>
+                  H {tick.high.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </Typography>
+              </Box>
+              <Box
+                sx={{
+                  position: "relative",
+                  height: 4,
+                  bgcolor: "action.hover",
+                  borderRadius: 2,
+                }}
+              >
+                <Box
+                  sx={{
+                    position: "absolute",
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    width: `${rangePos}%`,
+                    bgcolor: isUp ? "success.main" : "error.main",
+                    borderRadius: 2,
+                    transition: "width 0.3s ease",
+                  }}
+                />
+              </Box>
+            </Box>
+          )}
+
+          {/* Volume */}
+          {tick.volumeTradedToday !== undefined && (
+            <Typography sx={{ mt: 0.75, fontSize: 10, color: "text.disabled" }}>
+              Vol: {fmtVol(tick.volumeTradedToday)}
+            </Typography>
+          )}
         </>
       ) : (
         <>
           <Skeleton variant="text" width={80} height={20} />
           <Skeleton variant="text" width={60} height={16} />
+          <Skeleton
+            variant="rectangular"
+            width="100%"
+            height={4}
+            sx={{ mt: 1, borderRadius: 1 }}
+          />
+          <Skeleton variant="text" width={50} height={14} sx={{ mt: 0.75 }} />
         </>
       )}
     </Box>
