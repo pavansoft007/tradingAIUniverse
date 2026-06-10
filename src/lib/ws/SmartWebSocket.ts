@@ -1,18 +1,17 @@
 /**
- * Angel One SmartAPI WebSocket service.
+ * Angel One SmartAPI WebSocket2 client.
  *
- * Endpoint: wss://smartapisocket.angelone.in/smart-stream
+ * Connects directly to wss://smartapisocket.angelone.in/smart-stream using
+ * query-parameter auth (the same approach as SmartWebSocket v1 which the Angel
+ * One server still accepts for browser clients that cannot set HTTP headers).
  *
- * Browser note: The browser WebSocket API cannot set custom HTTP headers, so
- * credentials are passed as URL query parameters. If the Angel One server
- * requires header-based auth, add a Next.js API route (/api/ws-proxy) that
- * proxies the connection with the correct headers server-side.
- *
- * Features:
- * - Auto-reconnect with exponential backoff
+ * Features
+ * ────────
+ * - Auto-reconnect with exponential back-off (configurable, default 5 attempts)
+ * - 10-second heartbeat  (WebSocket2 spec requires 10 s, not 30 s)
  * - Subscription replay on reconnect
- * - 30-second heartbeat (keeps the connection alive)
- * - Concurrent subscription deduplication
+ * - Concurrent subscription de-duplication via correlationID
+ * - Binary message parsing via parseBinaryTick
  */
 
 import { parseBinaryTick } from "./binaryParser";
@@ -26,10 +25,10 @@ import type {
 } from "@/types/smartws.types";
 import { WS_ACTION } from "@/types/smartws.types";
 
-const WS_ENDPOINT = "wss://smartapisocket.angelone.in/smart-stream";
-const HEARTBEAT_MS = 30_000;
+const WS_ENDPOINT   = "wss://smartapisocket.angelone.in/smart-stream";
+const HEARTBEAT_MS  = 10_000;   // WebSocket2 spec: ping every 10 s
 
-type TickHandler = (tick: Tick) => void;
+type TickHandler   = (tick: Tick)                => void;
 type StatusHandler = (status: WsConnectionStatus) => void;
 
 export class SmartWebSocket {
@@ -38,13 +37,16 @@ export class SmartWebSocket {
   private _status: WsConnectionStatus = "idle";
 
   private reconnectAttempts = 0;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private reconnectTimer:  ReturnType<typeof setTimeout>   | null = null;
+  private heartbeatTimer:  ReturnType<typeof setInterval>  | null = null;
 
-  // Subscriptions keyed by correlationID so we can replay them on reconnect
-  private activeSubscriptions = new Map<string, { groups: TokenGroup[]; mode: WsMode }>();
+  // Subscriptions keyed by correlationID — replayed on reconnect
+  private activeSubscriptions = new Map<
+    string,
+    { groups: TokenGroup[]; mode: WsMode }
+  >();
 
-  private tickHandlers = new Set<TickHandler>();
+  private tickHandlers   = new Set<TickHandler>();
   private statusHandlers = new Set<StatusHandler>();
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -65,7 +67,7 @@ export class SmartWebSocket {
     this.config = null;
     this.activeSubscriptions.clear();
     if (this.ws) {
-      this.ws.onclose = null; // prevent reconnect trigger
+      this.ws.onclose = null;   // prevent reconnect loop
       this.ws.close(1000, "Client disconnect");
       this.ws = null;
     }
@@ -111,7 +113,7 @@ export class SmartWebSocket {
       this.ws.onopen    = () => this.handleOpen();
       this.ws.onmessage = (e) => this.handleMessage(e);
       this.ws.onclose   = (e) => this.handleClose(e);
-      this.ws.onerror   = () => this.handleError();
+      this.ws.onerror   = ()  => this.handleError();
     } catch {
       this.scheduleReconnect();
     }
@@ -120,9 +122,9 @@ export class SmartWebSocket {
   private buildUrl(config: SmartWsConfig): string {
     const url = new URL(WS_ENDPOINT);
     url.searchParams.set("clientCode", config.clientCode);
-    url.searchParams.set("jwtToken", config.jwtToken);
-    url.searchParams.set("apiKey", config.apiKey);
-    url.searchParams.set("feedToken", config.feedToken);
+    url.searchParams.set("jwtToken",   config.jwtToken);
+    url.searchParams.set("apiKey",     config.apiKey);
+    url.searchParams.set("feedToken",  config.feedToken);
     return url.toString();
   }
 
@@ -138,13 +140,12 @@ export class SmartWebSocket {
       const tick = parseBinaryTick(event.data);
       if (tick) this.tickHandlers.forEach((h) => h(tick));
     }
-    // Ignore text frames (server ACK messages)
+    // Text frames (ACKs / pongs) are intentionally ignored
   }
 
   private handleClose(event: CloseEvent): void {
     this.stopHeartbeat();
     if (event.code === 1000) {
-      // Normal closure — don't reconnect
       this.setStatus("disconnected");
       return;
     }
@@ -162,8 +163,8 @@ export class SmartWebSocket {
       this.setStatus("error");
       return;
     }
-    const base = this.config?.reconnectDelayMs ?? 1_000;
-    const delay = base * Math.pow(2, this.reconnectAttempts);   // exponential back-off
+    const base  = this.config?.reconnectDelayMs ?? 1_000;
+    const delay = base * Math.pow(2, this.reconnectAttempts);
     this.reconnectAttempts++;
     this.setStatus("reconnecting");
     this.reconnectTimer = setTimeout(() => this.open(), delay);
@@ -189,9 +190,7 @@ export class SmartWebSocket {
 
   private startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
-      if (this.ws?.readyState === WebSocket.OPEN) {
-        this.ws.send("ping");
-      }
+      if (this.ws?.readyState === WebSocket.OPEN) this.ws.send("ping");
     }, HEARTBEAT_MS);
   }
 
@@ -217,10 +216,12 @@ export class SmartWebSocket {
   }
 
   private correlationId(groups: TokenGroup[], mode: WsMode): string {
-    const tokens = groups.flatMap((g) => g.tokens.map((t) => `${g.exchangeType}:${t}`)).sort();
+    const tokens = groups
+      .flatMap((g) => g.tokens.map((t) => `${g.exchangeType}:${t}`))
+      .sort();
     return `${mode}_${tokens.join(",")}`;
   }
 }
 
-// Module-level singleton — one connection per browser session
+// Module-level singleton — one WebSocket connection per browser session
 export const smartWs = new SmartWebSocket();

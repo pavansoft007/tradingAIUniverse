@@ -32,6 +32,14 @@ export interface PositionItem {
   exchangeType: ExchangeType;
   qty:          number;
   avgEntry:     number;
+  /** Previous day close — used by PriceCell for green/red colour */
+  prevClose:    number;
+  /** Freshest LTP from REST polling (updated every 3 s) */
+  livePrice:    number;
+  /** P&L (₹) from live LTP — shown until WebSocket delivers a tick */
+  apiPnl:       number;
+  /** P&L (%) from live LTP */
+  apiPnlPct:    number;
   alloc:        number;
 }
 
@@ -45,13 +53,21 @@ function fmtPrice(p: number) {
 
 function LiveRow({ position }: { position: PositionItem }) {
   const theme = useTheme();
-  // Subscribe to WebSocket LTP for this token
-  const tick  = useTickData(position.token, position.exchangeType, WS_MODE.LTP);
-  // Fall back to avgEntry if no live tick yet (pre-market / offline)
-  const ltp   = tick?.ltp ?? position.avgEntry;
+  // Subscribe to WebSocket for sub-second ticks
+  const tick = useTickData(position.token, position.exchangeType, WS_MODE.LTP);
 
-  const pnl      = (ltp - position.avgEntry) * position.qty;
-  const pnlPct   = position.avgEntry > 0 ? ((ltp - position.avgEntry) / position.avgEntry) * 100 : 0;
+  // Priority: WebSocket tick → REST 3-s poll → prevClose
+  const ltp     = tick?.ltp ?? position.livePrice;
+  const hasWsTick = tick !== undefined;
+
+  // P&L: recalculate from WebSocket LTP when available; otherwise use REST-based apiPnl
+  const pnl    = hasWsTick
+    ? (ltp - position.avgEntry) * position.qty
+    : position.apiPnl;
+  const pnlPct = hasWsTick && position.avgEntry > 0
+    ? ((ltp - position.avgEntry) / position.avgEntry) * 100
+    : position.apiPnlPct;
+
   const curValue = ltp * position.qty;
   const isUp     = pnl >= 0;
   const pnlColor = isUp ? theme.palette.success.main : theme.palette.error.main;
@@ -78,7 +94,7 @@ function LiveRow({ position }: { position: PositionItem }) {
       </TableCell>
 
       <TableCell align="right">
-        <PriceCell price={ltp} prevClose={position.avgEntry} formatFn={fmtPrice} />
+        <PriceCell price={ltp} prevClose={position.prevClose} formatFn={fmtPrice} />
       </TableCell>
 
       <TableCell align="right">
@@ -148,30 +164,42 @@ function SkeletonRow() {
 function SummaryRow({ positions }: { positions: PositionItem[] }) {
   const theme = useTheme();
 
-  // Use avgEntry × qty as a rough total since live LTP hooks can't run in memo
-  const totalCost = useMemo(
-    () => positions.reduce((acc, pos) => acc + pos.avgEntry * pos.qty, 0),
-    [positions],
-  );
+  const { totalLiveValue, totalPnl, totalPnlPct } = useMemo(() => {
+    const invested = positions.reduce((a, p) => a + p.avgEntry   * p.qty, 0);
+    const live     = positions.reduce((a, p) => a + p.livePrice  * p.qty, 0);
+    const pnl      = live - invested;
+    const pnlPct   = invested > 0 ? (pnl / invested) * 100 : 0;
+    return { totalLiveValue: live, totalPnl: pnl, totalPnlPct: pnlPct };
+  }, [positions]);
 
-  // totalPnL will be 0 here since both use avgEntry — live rows already show real PnL individually
+  const isUp = totalPnl >= 0;
+  const pnlColor = isUp ? theme.palette.success.main : theme.palette.error.main;
 
   return (
     <TableRow sx={{ bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
-      <TableCell colSpan={5} sx={{ pl: 2.5, py: 1 }}>
+      <TableCell sx={{ pl: 2.5, py: 1 }}>
         <Typography sx={{ fontSize: 12, fontWeight: 700, color: "text.secondary" }}>
           Total · {positions.length} holding{positions.length !== 1 ? "s" : ""}
         </Typography>
       </TableCell>
+      <TableCell colSpan={3} />
       <TableCell align="right">
-        <Tooltip title="Invested value (avg × qty)">
+        <Typography sx={{ fontSize: 13, fontWeight: 700, color: pnlColor, fontFeatureSettings: '"tnum"' }}>
+          {isUp ? "+" : ""}{fmtPrice(Math.abs(totalPnl))}
+          <Box component="span" sx={{ fontSize: 10, ml: 0.5, opacity: 0.8 }}>
+            ({isUp ? "+" : ""}{totalPnlPct.toFixed(2)}%)
+          </Box>
+        </Typography>
+      </TableCell>
+      <TableCell align="right">
+        <Tooltip title="Current market value (live price × qty)">
           <Typography sx={{ fontSize: 13, fontWeight: 800, fontFeatureSettings: '"tnum"' }}>
-            {fmtPrice(totalCost)}
+            {fmtPrice(totalLiveValue)}
           </Typography>
         </Tooltip>
       </TableCell>
       <TableCell align="right" sx={{ pr: 2.5 }}>
-        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>Live rows above</Typography>
+        <Typography sx={{ fontSize: 11, color: "text.secondary" }}>Live</Typography>
       </TableCell>
     </TableRow>
   );

@@ -10,6 +10,7 @@ import Grid           from "@mui/material/Grid";
 import Skeleton       from "@mui/material/Skeleton";
 import Tab            from "@mui/material/Tab";
 import Tabs           from "@mui/material/Tabs";
+import Tooltip        from "@mui/material/Tooltip";
 import Typography     from "@mui/material/Typography";
 import { useState }                     from "react";
 import { PageHeader }                   from "@/components/common/PageHeader";
@@ -17,11 +18,13 @@ import { StatCard }                     from "@/components/common/StatCard";
 import { LivePositionsTable }           from "@/components/features/portfolio/LivePositionsTable";
 import { PortfolioAllocationChart }     from "@/components/features/portfolio/PortfolioAllocationChart";
 import { PositionsTable }               from "@/components/features/portfolio/PositionsTable";
+import { useConnectionStatus }          from "@/hooks/useMarketWatch";
 import { useHoldings }                  from "@/hooks/usePortfolio";
 
 export default function PortfolioClient() {
   const [tab, setTab] = useState<"holdings" | "positions">("holdings");
   const { data: holdingsData, isLoading } = useHoldings();
+  const wsStatus = useConnectionStatus();
   const th = holdingsData?.totalholding;
 
   const totalValue  = th?.totalholdingvalue    ?? 0;
@@ -109,31 +112,41 @@ export default function PortfolioClient() {
                 <Tab label="Positions" value="positions" />
               </Tabs>
 
-              {tab === "holdings" && (
-                <Chip
-                  label="Live"
-                  size="small"
-                  icon={
-                    <Box
-                      component="span"
+              {tab === "holdings" && (() => {
+                const isWsLive = wsStatus === "connected";
+                const dotColor = isWsLive ? "#00D97E" : "#F59E0B";
+                const label    = isWsLive ? "WS Live" : "Polling 3s";
+                const tooltip  = isWsLive
+                  ? "Real-time prices via WebSocket"
+                  : "Prices refreshed every 3 seconds via REST API";
+                return (
+                  <Tooltip title={tooltip} placement="left">
+                    <Chip
+                      label={label}
+                      size="small"
+                      icon={
+                        <Box
+                          component="span"
+                          sx={{
+                            width: 6, height: 6, borderRadius: "50%",
+                            background: dotColor, display: "inline-block",
+                            animation: "pulse 1.5s ease-in-out infinite",
+                            "@keyframes pulse": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } },
+                            ml: "6px !important", mr: "-2px !important",
+                          }}
+                        />
+                      }
                       sx={{
-                        width: 6, height: 6, borderRadius: "50%",
-                        background: "#00D97E", display: "inline-block",
-                        animation: "pulse 1.5s ease-in-out infinite",
-                        "@keyframes pulse": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } },
-                        ml: "6px !important", mr: "-2px !important",
+                        height: 22, fontSize: 10, fontWeight: 700,
+                        background: isWsLive ? "rgba(0,217,126,0.12)" : "rgba(245,158,11,0.12)",
+                        color: dotColor,
+                        border: `1px solid ${isWsLive ? "rgba(0,217,126,0.25)" : "rgba(245,158,11,0.25)"}`,
+                        mb: 0.5,
                       }}
                     />
-                  }
-                  sx={{
-                    height: 22, fontSize: 10, fontWeight: 700,
-                    background: "rgba(0,217,126,0.12)",
-                    color: "#00D97E",
-                    border: "1px solid rgba(0,217,126,0.25)",
-                    mb: 0.5,
-                  }}
-                />
-              )}
+                  </Tooltip>
+                );
+              })()}
 
               {tab === "positions" && (
                 <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>

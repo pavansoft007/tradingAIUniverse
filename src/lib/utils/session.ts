@@ -10,7 +10,8 @@
  * security trade-off vs. localStorage (persistent across tabs).
  */
 
-const SESSION_JWT_KEY = "ao_jwt_v1";
+const SESSION_JWT_KEY  = "ao_jwt_v1";
+const SESSION_FEED_KEY = "ao_feed_v1";
 const SESSION_USER_KEY = "ao_user_v1";
 const SESSION_COOKIE_NAME = "ao_session";
 
@@ -45,6 +46,26 @@ export const sessionUtil = {
   clearJWT(): void {
     if (typeof window === "undefined") return;
     window.sessionStorage.removeItem(SESSION_JWT_KEY);
+  },
+
+  // ── Feed token (needed for WebSocket market stream) ──────────────────────
+
+  saveFeedToken(token: string): void {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem(SESSION_FEED_KEY, encode(token));
+  },
+
+  loadFeedToken(): string | null {
+    if (typeof window === "undefined") return null;
+    const raw = window.sessionStorage.getItem(SESSION_FEED_KEY);
+    if (!raw) return null;
+    const decoded = decode(raw);
+    return decoded || null;
+  },
+
+  clearFeedToken(): void {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.removeItem(SESSION_FEED_KEY);
   },
 
   // ── User profile ──────────────────────────────────────────────────────────
@@ -107,6 +128,7 @@ export const sessionUtil = {
 
   clearAll(): void {
     this.clearJWT();
+    this.clearFeedToken();
     this.clearUser();
     this.clearSessionCookie();
   },

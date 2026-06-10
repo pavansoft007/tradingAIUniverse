@@ -6,6 +6,7 @@ export const WS_MODE = {
   LTP: 1,        // Last Traded Price only  (51 bytes)
   QUOTE: 2,      // LTP + OHLC + volume     (123 bytes)
   SNAP_QUOTE: 3, // Quote + market depth    (339 bytes)
+  DEPTH: 4,      // 20-level order book, NSE_CM only, max 50 tokens
 } as const;
 export type WsMode = (typeof WS_MODE)[keyof typeof WS_MODE];
 

@@ -63,8 +63,9 @@ export const useAngelOneStore = create<AngelOneStore>((set, get) => ({
   setSession(tokens, user, clientCode) {
     const session = buildSession(tokens);
 
-    // Persist JWT + user to sessionStorage
+    // Persist JWT + feedToken + user to sessionStorage
     sessionUtil.saveJWT(session.jwtToken);
+    sessionUtil.saveFeedToken(session.feedToken);
     if (user) sessionUtil.saveUser(user);
     // Set the session cookie so Next.js middleware allows dashboard access
     sessionUtil.setSessionCookie();
@@ -90,8 +91,9 @@ export const useAngelOneStore = create<AngelOneStore>((set, get) => ({
   },
 
   rehydrate() {
-    const jwt = sessionUtil.loadJWT();
-    const user = sessionUtil.loadUser<AngelOneUser>();
+    const jwt       = sessionUtil.loadJWT();
+    const feedToken = sessionUtil.loadFeedToken() ?? "";
+    const user      = sessionUtil.loadUser<AngelOneUser>();
 
     if (jwt && !isTokenExpired(jwt, 60_000)) {
       const expiry = getTokenExpiry(jwt) ?? Date.now();
@@ -99,7 +101,7 @@ export const useAngelOneStore = create<AngelOneStore>((set, get) => ({
         session: {
           jwtToken: jwt,
           refreshToken: "", // refresh token is NOT persisted — user must re-login if tab was closed
-          feedToken: "",
+          feedToken,
           tokenExpiry: expiry,
         },
         user: user ?? null,
