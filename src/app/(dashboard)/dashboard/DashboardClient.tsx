@@ -15,7 +15,7 @@ import { PortfolioPerformanceChart } from "@/components/features/dashboard/Portf
 import { SectorAllocationChart }     from "@/components/features/dashboard/SectorAllocationChart";
 import { StatCard }                  from "@/components/common/StatCard";
 import { useAngelOneSession }        from "@/hooks/useAngelOneAuth";
-import { useHoldings, useFunds }     from "@/hooks/usePortfolio";
+import { useFunds, useHoldingsAsPositions } from "@/hooks/usePortfolio";
 import { useOrderStore }             from "@/store/useOrderStore";
 
 export default function DashboardClient() {
@@ -24,38 +24,47 @@ export default function DashboardClient() {
   const hour     = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const { data: holdingsData, isLoading: holdingsLoading } = useHoldings();
-  const { data: fundsData,    isLoading: fundsLoading }    = useFunds();
+  // Live portfolio stats — positions update every 3 s via getMarketQuote polling
+  // and sub-second when WebSocket ticks arrive
+  const { positions, isLoading: posLoading } = useHoldingsAsPositions();
+  const { data: fundsData, isLoading: fundsLoading } = useFunds();
+
   const allPositions  = useOrderStore((s) => s.positions);
   const openPositions = useMemo(
     () => allPositions.filter((p) => parseInt(p.netqty, 10) !== 0),
     [allPositions],
   );
 
-  const th          = holdingsData?.totalholding;
-  const totalValue  = th?.totalholdingvalue    ?? 0;
-  const totalPnL    = th?.totalprofitandloss    ?? 0;
-  const pnlPct      = th?.totalpnlpercentage    ?? 0;
-  const freeCash    = parseFloat(fundsData?.availablecash ?? "0");
-  const m2mUnreal   = parseFloat(fundsData?.m2munrealized ?? "0");
-  const isUp        = totalPnL >= 0;
-  const isLoading   = holdingsLoading || fundsLoading;
+  // Aggregate live values from the polled positions
+  const { liveTotal, livePnl, livePnlPct } = useMemo(() => {
+    if (!positions.length) return { liveTotal: 0, livePnl: 0, livePnlPct: 0 };
+    const invested = positions.reduce((a, p) => a + p.avgEntry  * p.qty, 0);
+    const current  = positions.reduce((a, p) => a + p.livePrice * p.qty, 0);
+    const pnl      = current - invested;
+    const pnlPct   = invested > 0 ? (pnl / invested) * 100 : 0;
+    return { liveTotal: current, livePnl: pnl, livePnlPct: pnlPct };
+  }, [positions]);
+
+  const freeCash  = parseFloat(fundsData?.availablecash   ?? "0");
+  const m2mUnreal = parseFloat(fundsData?.m2munrealized   ?? "0");
+  const isUp      = livePnl >= 0;
+  const isLoading = posLoading || fundsLoading;
 
   const STATS = [
     {
-      title:    "Portfolio Value",
-      value:    totalValue,
-      change:   pnlPct,
+      title:       "Portfolio Value",
+      value:       liveTotal,
+      change:      livePnlPct,
       changeLabel: "overall return",
-      prefix:   "₹",
-      icon:     <AccountBalanceWalletOutlinedIcon />,
-      iconColor:"#6366F1",
+      prefix:      "₹",
+      icon:        <AccountBalanceWalletOutlinedIcon />,
+      iconColor:   "#6366F1",
     },
     {
       title:       "Unrealized P&L",
-      value:       Math.abs(m2mUnreal || totalPnL),
+      value:       Math.abs(m2mUnreal || livePnl),
       prefix:      isUp ? "+₹" : "-₹",
-      change:      pnlPct,
+      change:      livePnlPct,
       changeLabel: "unrealized",
       icon:        <TrendingUpIcon />,
       iconColor:   "#00D97E",
