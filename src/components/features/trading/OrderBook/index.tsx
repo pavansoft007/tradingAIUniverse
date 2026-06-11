@@ -18,8 +18,10 @@ import {
   Typography,
 } from "@mui/material";
 import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
+import EditOutlinedIcon    from "@mui/icons-material/EditOutlined";
 import { useOrderBook, useCancelOrder } from "@/hooks/useAngelOrders";
 import { useOrderStore } from "@/store/useOrderStore";
+import { ModifyOrderDialog } from "@/components/features/trading/ModifyOrderDialog";
 import { ANGEL_VARIETY } from "@/types/angel-order.types";
 import type { AngelOrder } from "@/types/angel-order.types";
 
@@ -56,10 +58,11 @@ interface RowProps {
   order:      AngelOrder;
   canCancel:  boolean;
   onCancel:   (order: AngelOrder) => void;
+  onModify:   (order: AngelOrder) => void;
   cancelling: boolean;
 }
 
-function OrderRow({ order, canCancel, onCancel, cancelling }: RowProps) {
+function OrderRow({ order, canCancel, onCancel, onModify, cancelling }: RowProps) {
   const isBuy = order.transactiontype === "BUY";
 
   return (
@@ -92,22 +95,31 @@ function OrderRow({ order, canCancel, onCancel, cancelling }: RowProps) {
       </TableCell>
       <TableCell>{order.updatetime || "–"}</TableCell>
       <TableCell align="center">
-        {canCancel && (
-          <Tooltip title="Cancel order">
-            <span>
-              <IconButton
-                size="small"
-                color="error"
-                disabled={cancelling}
-                onClick={() => onCancel(order)}
-              >
-                {cancelling
-                  ? <CircularProgress size={14} />
-                  : <CancelOutlinedIcon fontSize="small" />}
+        <Box sx={{ display: "flex", gap: 0.25, justifyContent: "center" }}>
+          {canCancel && (
+            <Tooltip title="Modify order">
+              <IconButton size="small" onClick={() => onModify(order)}>
+                <EditOutlinedIcon sx={{ fontSize: 14 }} />
               </IconButton>
-            </span>
-          </Tooltip>
-        )}
+            </Tooltip>
+          )}
+          {canCancel && (
+            <Tooltip title="Cancel order">
+              <span>
+                <IconButton
+                  size="small"
+                  color="error"
+                  disabled={cancelling}
+                  onClick={() => onCancel(order)}
+                >
+                  {cancelling
+                    ? <CircularProgress size={14} />
+                    : <CancelOutlinedIcon fontSize="small" />}
+                </IconButton>
+              </span>
+            </Tooltip>
+          )}
+        </Box>
       </TableCell>
     </TableRow>
   );
@@ -119,6 +131,7 @@ type TabId = "all" | "open" | "complete";
 
 export function OrderBook() {
   const [tab, setTab] = useState<TabId>("all");
+  const [modifyOrder, setModifyOrder] = useState<AngelOrder | null>(null);
 
   const { isFetching } = useOrderBook();
   const { mutate: cancelOrder, isPending: cancelling } = useCancelOrder();
@@ -149,7 +162,12 @@ export function OrderBook() {
     cancelOrder({ variety: order.variety ?? ANGEL_VARIETY.NORMAL, orderid: order.orderid });
   };
 
+  const handleModify = (order: AngelOrder) => {
+    setModifyOrder(order);
+  };
+
   return (
+    <>
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, px: 2, pt: 1.5 }}>
         <Tabs
@@ -195,6 +213,7 @@ export function OrderBook() {
                   order={o}
                   canCancel={isOpen(o)}
                   onCancel={handleCancel}
+                  onModify={handleModify}
                   cancelling={cancelling}
                 />
               ))
@@ -203,5 +222,11 @@ export function OrderBook() {
         </Table>
       </TableContainer>
     </Box>
+
+    <ModifyOrderDialog
+      order={modifyOrder}
+      onClose={() => setModifyOrder(null)}
+    />
+    </>
   );
 }

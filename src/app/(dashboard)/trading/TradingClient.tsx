@@ -1,35 +1,38 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import TrendingDownIcon from "@mui/icons-material/TrendingDown";
-import TrendingUpIcon   from "@mui/icons-material/TrendingUp";
-import Box        from "@mui/material/Box";
-import Card       from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import Chip       from "@mui/material/Chip";
-import CircularProgress from "@mui/material/CircularProgress";
-import Divider    from "@mui/material/Divider";
-import Grid       from "@mui/material/Grid";
-import Tab        from "@mui/material/Tab";
-import Tabs       from "@mui/material/Tabs";
-import Typography from "@mui/material/Typography";
-import { alpha, useTheme } from "@mui/material/styles";
+import { useMemo, useState }  from "react";
+import TrendingDownIcon       from "@mui/icons-material/TrendingDown";
+import TrendingUpIcon         from "@mui/icons-material/TrendingUp";
+import Box                   from "@mui/material/Box";
+import Card                  from "@mui/material/Card";
+import CardContent            from "@mui/material/CardContent";
+import Chip                  from "@mui/material/Chip";
+import CircularProgress       from "@mui/material/CircularProgress";
+import Divider                from "@mui/material/Divider";
+import Grid                  from "@mui/material/Grid";
+import Tab                   from "@mui/material/Tab";
+import Tabs                  from "@mui/material/Tabs";
+import Typography            from "@mui/material/Typography";
+import { alpha, useTheme }   from "@mui/material/styles";
 
 import { OrderPanel }         from "@/components/features/trading/OrderPanel";
 import { OrderBook }          from "@/components/features/trading/OrderBook";
 import { TradeBook }          from "@/components/features/trading/TradeBook";
+import { PositionsPanel }     from "@/components/features/trading/PositionsPanel";
+import { GTTPanel }           from "@/components/features/trading/GTTPanel";
+import { RiskGauge }          from "@/components/features/trading/RiskGauge";
 import { LivePositionsTable } from "@/components/features/portfolio/LivePositionsTable";
 import { PageHeader }         from "@/components/common/PageHeader";
 import { useTradingStore }    from "@/store/useTradingStore";
 import { useMarketQuote }     from "@/hooks/useMarketQuote";
 import type { AngelDepthLevel } from "@/types/angel-portfolio.types";
 
-// ── Default trading symbol config ─────────────────────────────────────────────
+// ── Default config ────────────────────────────────────────────────────────────
 
 const DEFAULT_TOKEN    = "2885";   // RELIANCE
 const DEFAULT_EXCHANGE = "NSE";
 
-// ── Market Depth with real Angel One data ─────────────────────────────────────
+// ── Market Depth ──────────────────────────────────────────────────────────────
 
 interface MarketDepthProps {
   ltp:      number;
@@ -49,7 +52,11 @@ function MarketDepth({ ltp, bids = [], asks = [], loading }: MarketDepthProps) {
     const color = side === "bid" ? theme.palette.success.main : theme.palette.error.main;
     return (
       <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.4, position: "relative" }}>
-        <Box sx={{ position: "absolute", right: 0, top: 0, bottom: 0, width: `${(quantity / maxQty) * 100}%`, background: alpha(color, 0.06), borderRadius: "3px" }} />
+        <Box sx={{
+          position: "absolute", right: 0, top: 0, bottom: 0,
+          width: `${(quantity / maxQty) * 100}%`,
+          background: alpha(color, 0.06), borderRadius: "3px",
+        }} />
         <Typography sx={{ fontSize: 12, color, fontFeatureSettings: '"tnum"', flex: 1, fontWeight: 500 }}>
           {price.toFixed(2)}
         </Typography>
@@ -67,22 +74,24 @@ function MarketDepth({ ltp, bids = [], asks = [], loading }: MarketDepthProps) {
     return <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}><CircularProgress size={24} /></Box>;
   }
 
-  const displayAsks = asks.length ? asks : [];
-  const displayBids = bids.length ? bids : [];
-
   return (
     <Box>
-      {[...displayAsks].reverse().map((a, i) => <Row key={i} {...a} side="ask" />)}
+      {[...asks].reverse().map((a, i) => <Row key={i} {...a} side="ask" />)}
 
-      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", py: 0.75, my: 0.5, borderTop: "1px solid", borderBottom: "1px solid", borderColor: "divider", background: alpha(theme.palette.primary.main, 0.06), borderRadius: "6px" }}>
+      <Box sx={{
+        display: "flex", alignItems: "center", justifyContent: "center",
+        py: 0.75, my: 0.5,
+        borderTop: "1px solid", borderBottom: "1px solid", borderColor: "divider",
+        background: alpha(theme.palette.primary.main, 0.06), borderRadius: "6px",
+      }}>
         <Typography sx={{ fontSize: 14, fontWeight: 800, color: "primary.main", fontFeatureSettings: '"tnum"' }}>
           ₹{ltp.toFixed(2)}
         </Typography>
       </Box>
 
-      {displayBids.map((b, i) => <Row key={i} {...b} side="bid" />)}
+      {bids.map((b, i) => <Row key={i} {...b} side="bid" />)}
 
-      {!displayBids.length && !displayAsks.length && (
+      {!bids.length && !asks.length && (
         <Typography sx={{ fontSize: 12, color: "text.secondary", textAlign: "center", py: 2 }}>
           Log in to see live depth
         </Typography>
@@ -90,7 +99,12 @@ function MarketDepth({ ltp, bids = [], asks = [], loading }: MarketDepthProps) {
 
       <Box sx={{ display: "flex", gap: 1, pt: 1, mt: 0.5, borderTop: "1px solid", borderColor: "divider" }}>
         {["Price", "Qty", "Ord"].map((h) => (
-          <Typography key={h} sx={{ fontSize: 10, color: "text.disabled", textTransform: "uppercase", letterSpacing: "0.04em", flex: h === "Price" ? 1 : undefined, textAlign: h !== "Price" ? "right" : undefined, minWidth: h === "Qty" ? 70 : h === "Ord" ? 24 : undefined }}>
+          <Typography key={h} sx={{
+            fontSize: 10, color: "text.disabled", textTransform: "uppercase", letterSpacing: "0.04em",
+            flex: h === "Price" ? 1 : undefined,
+            textAlign: h !== "Price" ? "right" : undefined,
+            minWidth: h === "Qty" ? 70 : h === "Ord" ? 24 : undefined,
+          }}>
             {h}
           </Typography>
         ))}
@@ -106,7 +120,6 @@ export default function TradingClient() {
   const { selectedSymbol } = useTradingStore();
   const [tab, setTab] = useState(0);
 
-  // Use the selected symbol token from store, defaulting to RELIANCE
   const symbolToken = DEFAULT_TOKEN;
   const exchange    = DEFAULT_EXCHANGE;
 
@@ -137,6 +150,11 @@ export default function TradingClient() {
         subtitle="Place orders and manage your positions"
         breadcrumbs={[{ label: "Dashboard", href: "/dashboard" }, { label: "Trading" }]}
       />
+
+      {/* Risk gauge row */}
+      <Box sx={{ mb: 2 }}>
+        <RiskGauge />
+      </Box>
 
       {/* Symbol strip */}
       <Card sx={{ mb: 2 }}>
@@ -170,7 +188,12 @@ export default function TradingClient() {
                 <Chip
                   label={`${isUp ? "+" : ""}${changePct.toFixed(2)}%`}
                   size="small"
-                  sx={{ height: 22, fontSize: 11.5, fontWeight: 700, background: alpha(changeColor, 0.12), color: changeColor, border: `1px solid ${alpha(changeColor, 0.25)}` }}
+                  sx={{
+                    height: 22, fontSize: 11.5, fontWeight: 700,
+                    background: alpha(changeColor, 0.12),
+                    color: changeColor,
+                    border: `1px solid ${alpha(changeColor, 0.25)}`,
+                  }}
                 />
               </Box>
             )}
@@ -209,7 +232,7 @@ export default function TradingClient() {
           </Card>
         </Grid>
 
-        {/* Market Depth (real) */}
+        {/* Market Depth */}
         <Grid size={{ xs: 12, md: 2 }}>
           <Card sx={{ height: 580 }}>
             <CardContent sx={{ p: "16px !important" }}>
@@ -224,24 +247,31 @@ export default function TradingClient() {
           </Card>
         </Grid>
 
-        {/* Order Book / Trade Book / Positions */}
+        {/* Order Book / Trade Book / Positions / Holdings */}
         <Grid size={{ xs: 12, md: 7 }}>
           <Card sx={{ height: 580, display: "flex", flexDirection: "column" }}>
             <Box sx={{ borderBottom: "1px solid", borderColor: "divider" }}>
               <Tabs
                 value={tab}
                 onChange={(_, v) => setTab(v)}
-                sx={{ minHeight: 44, px: 1, "& .MuiTab-root": { minHeight: 44, fontSize: 13, fontWeight: 600, textTransform: "none" } }}
+                sx={{
+                  minHeight: 44, px: 1,
+                  "& .MuiTab-root": { minHeight: 44, fontSize: 13, fontWeight: 600, textTransform: "none" },
+                }}
               >
                 <Tab label="Order Book" />
                 <Tab label="Trade Book" />
+                <Tab label="Positions" />
                 <Tab label="Holdings" />
+                <Tab label="GTT Orders" />
               </Tabs>
             </Box>
             <Box sx={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
               {tab === 0 && <OrderBook />}
               {tab === 1 && <TradeBook />}
-              {tab === 2 && <LivePositionsTable />}
+              {tab === 2 && <PositionsPanel />}
+              {tab === 3 && <LivePositionsTable />}
+              {tab === 4 && <GTTPanel />}
             </Box>
           </Card>
         </Grid>

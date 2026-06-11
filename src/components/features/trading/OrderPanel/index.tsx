@@ -1,36 +1,36 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Box,
-  Button,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Divider,
-  FormControl,
-  FormHelperText,
-  Grid,
-  InputAdornment,
-  InputLabel,
-  MenuItem,
-  Select,
-  Tab,
-  Tabs,
-  TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Typography,
-} from "@mui/material";
 import TrendingUpIcon   from "@mui/icons-material/TrendingUp";
 import TrendingDownIcon from "@mui/icons-material/TrendingDown";
+import Alert            from "@mui/material/Alert";
+import Box              from "@mui/material/Box";
+import Button           from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
+import Dialog           from "@mui/material/Dialog";
+import DialogActions    from "@mui/material/DialogActions";
+import DialogContent    from "@mui/material/DialogContent";
+import DialogTitle      from "@mui/material/DialogTitle";
+import Divider          from "@mui/material/Divider";
+import FormControl      from "@mui/material/FormControl";
+import FormHelperText   from "@mui/material/FormHelperText";
+import Grid             from "@mui/material/Grid";
+import InputAdornment   from "@mui/material/InputAdornment";
+import InputLabel       from "@mui/material/InputLabel";
+import MenuItem         from "@mui/material/MenuItem";
+import Select           from "@mui/material/Select";
+import Tab              from "@mui/material/Tab";
+import Tabs             from "@mui/material/Tabs";
+import TextField        from "@mui/material/TextField";
+import ToggleButton     from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Tooltip          from "@mui/material/Tooltip";
+import Typography       from "@mui/material/Typography";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ScripSearch }        from "@/components/features/trading/ScripSearch";
 import { validateOrder, buildOrderSummary } from "@/lib/orders/validator";
 import { defaultOrderFormValues } from "@/lib/orders/executor";
-import { usePlaceOrder } from "@/hooks/useAngelOrders";
-import { useOrderStore } from "@/store/useOrderStore";
+import { useOrderEngine }     from "@/hooks/useOrderEngine";
+import { useOrderStore }      from "@/store/useOrderStore";
 import {
   ANGEL_DURATION,
   ANGEL_EXCHANGE,
@@ -38,6 +38,7 @@ import {
   ANGEL_PRODUCT_TYPE,
   type OrderFormValues,
 } from "@/types/angel-order.types";
+import type { ScripSearchResult } from "@/lib/api/angelone/scrip.api";
 
 // ── Option lists ──────────────────────────────────────────────────────────────
 
@@ -62,17 +63,22 @@ const DURATION_OPTS = [
 const fmt = (n: number) =>
   n.toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 });
 
-// ── Confirmation dialog ───────────────────────────────────────────────────────
+// ── Confirm dialog ────────────────────────────────────────────────────────────
 
 interface ConfirmDialogProps {
-  open:    boolean;
-  values:  OrderFormValues;
-  ltp?:    number;
-  onOk:    () => void;
-  onCancel:() => void;
+  open:          boolean;
+  values:        OrderFormValues;
+  ltp?:          number;
+  riskWarnings:  string[];
+  riskBlocked:   boolean;
+  blockReason:   string | null;
+  onOk:          () => void;
+  onCancel:      () => void;
 }
 
-function ConfirmDialog({ open, values, ltp, onOk, onCancel }: ConfirmDialogProps) {
+function ConfirmDialog({
+  open, values, ltp, riskWarnings, riskBlocked, blockReason, onOk, onCancel,
+}: ConfirmDialogProps) {
   const { estimatedValue, marginRequired, slippageNote } = buildOrderSummary(values, ltp);
   const isBuy = values.transactiontype === "BUY";
 
@@ -99,9 +105,19 @@ function ConfirmDialog({ open, values, ltp, onOk, onCancel }: ConfirmDialogProps
               <Typography variant="body2" fontWeight={600}>{val}</Typography>
             </Box>
           ))}
+
           {slippageNote && (
-            <Alert severity="info" sx={{ py: 0.5, fontSize: "0.75rem" }}>
-              {slippageNote}
+            <Alert severity="info" sx={{ py: 0.5, fontSize: "0.75rem" }}>{slippageNote}</Alert>
+          )}
+
+          {riskWarnings.map((w, i) => (
+            <Alert key={i} severity="warning" sx={{ py: 0.5, fontSize: "0.75rem" }}>{w}</Alert>
+          ))}
+
+          {riskBlocked && (
+            <Alert severity="error" sx={{ py: 0.5 }}>
+              <Typography variant="body2" fontWeight={700}>Order Blocked</Typography>
+              <Typography variant="caption">{blockReason}</Typography>
             </Alert>
           )}
         </Box>
@@ -112,9 +128,10 @@ function ConfirmDialog({ open, values, ltp, onOk, onCancel }: ConfirmDialogProps
           onClick={onOk}
           variant="contained"
           color={isBuy ? "success" : "error"}
+          disabled={riskBlocked}
           disableElevation
         >
-          Confirm {isBuy ? "Buy" : "Sell"}
+          {riskBlocked ? "Blocked" : `Confirm ${isBuy ? "Buy" : "Sell"}`}
         </Button>
       </DialogActions>
     </Dialog>
@@ -124,7 +141,6 @@ function ConfirmDialog({ open, values, ltp, onOk, onCancel }: ConfirmDialogProps
 // ── Main panel ────────────────────────────────────────────────────────────────
 
 interface OrderPanelProps {
-  /** Pre-fill symbol when a watchlist row is clicked */
   symbol?:      string;
   symboltoken?: string;
   exchange?:    string;
@@ -142,11 +158,10 @@ export function OrderPanel({ symbol, symboltoken, exchange, ltp }: OrderPanelPro
   const [errors,      setErrors]      = useState<Record<string, string>>({});
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  const { mutate: placeOrder } = usePlaceOrder();
-  const isPlacing = useOrderStore((s) => s.isPlacing);
+  const { submitOrder, riskPreview, isPlacing } = useOrderEngine();
   const placingError = useOrderStore((s) => s.placingError);
 
-  // Sync symbol props → form if they change externally
+  // Sync external symbol props
   useEffect(() => {
     if (symbol)      setValues((v) => ({ ...v, tradingsymbol: symbol }));
     if (symboltoken) setValues((v) => ({ ...v, symboltoken }));
@@ -161,6 +176,21 @@ export function OrderPanel({ symbol, symboltoken, exchange, ltp }: OrderPanelPro
     [],
   );
 
+  const handleScripSelect = useCallback((scrip: ScripSearchResult) => {
+    setValues((prev) => ({
+      ...prev,
+      tradingsymbol: scrip.tradingsymbol,
+      symboltoken:   scrip.symboltoken,
+      exchange:      scrip.exchange,
+    }));
+    setErrors((prev) => {
+      const e = { ...prev };
+      delete e.tradingsymbol;
+      delete e.symboltoken;
+      return e;
+    });
+  }, []);
+
   const isMarket  = values.ordertype === ANGEL_ORDER_TYPE.MARKET;
   const isSLOrder =
     values.ordertype === ANGEL_ORDER_TYPE.STOPLOSS_LIMIT ||
@@ -171,6 +201,12 @@ export function OrderPanel({ symbol, symboltoken, exchange, ltp }: OrderPanelPro
     return price * values.quantity;
   }, [isMarket, ltp, values.price, values.quantity]);
 
+  // Live risk preview
+  const risk = useMemo(() => {
+    if (!values.tradingsymbol) return null;
+    return riskPreview(values);
+  }, [riskPreview, values]);
+
   const handleSubmit = () => {
     const result = validateOrder(values);
     if (!result.valid) {
@@ -180,43 +216,40 @@ export function OrderPanel({ symbol, symboltoken, exchange, ltp }: OrderPanelPro
     setConfirmOpen(true);
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     setConfirmOpen(false);
-    placeOrder(values);
+    await submitOrder(values, { source: "manual" });
   };
 
   const isBuy = values.transactiontype === "BUY";
+  const btnColor = isBuy ? "success" : "error";
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
-      {/* BUY / SELL toggle */}
+      {/* BUY / SELL tabs */}
       <Tabs
         value={isBuy ? 0 : 1}
         onChange={(_, v) => set("transactiontype", v === 0 ? "BUY" : "SELL")}
         variant="fullWidth"
         sx={{
-          "& .MuiTab-root": { fontWeight: 700, fontSize: "0.875rem" },
+          "& .MuiTab-root":  { fontWeight: 700, fontSize: "0.875rem" },
           "& .Mui-selected": { color: isBuy ? "success.main" : "error.main" },
           "& .MuiTabs-indicator": { backgroundColor: isBuy ? "success.main" : "error.main" },
         }}
       >
-        <Tab icon={<TrendingUpIcon fontSize="small" />} iconPosition="start" label="BUY"  />
+        <Tab icon={<TrendingUpIcon fontSize="small" />}   iconPosition="start" label="BUY" />
         <Tab icon={<TrendingDownIcon fontSize="small" />} iconPosition="start" label="SELL" />
       </Tabs>
 
       <Box sx={{ flex: 1, overflowY: "auto", p: 2 }}>
         <Grid container spacing={2}>
-          {/* Symbol */}
+          {/* Symbol — autocomplete scrip search */}
           <Grid size={8}>
-            <TextField
-              label="Symbol"
-              size="small"
-              fullWidth
+            <ScripSearch
+              exchange={values.exchange}
               value={values.tradingsymbol}
-              onChange={(e) => set("tradingsymbol", e.target.value.toUpperCase())}
-              error={!!errors.tradingsymbol}
-              helperText={errors.tradingsymbol}
-              placeholder="e.g. RELIANCE-EQ"
+              error={errors.tradingsymbol || errors.symboltoken}
+              onSelect={handleScripSelect}
             />
           </Grid>
 
@@ -268,7 +301,7 @@ export function OrderPanel({ symbol, symboltoken, exchange, ltp }: OrderPanelPro
             />
           </Grid>
 
-          {/* Price (hidden for MARKET) */}
+          {/* Price */}
           <Grid size={6}>
             <TextField
               label="Price"
@@ -287,7 +320,7 @@ export function OrderPanel({ symbol, symboltoken, exchange, ltp }: OrderPanelPro
             />
           </Grid>
 
-          {/* Trigger price (only for SL orders) */}
+          {/* Trigger price (SL orders only) */}
           {isSLOrder && (
             <Grid size={6}>
               <TextField
@@ -347,11 +380,10 @@ export function OrderPanel({ symbol, symboltoken, exchange, ltp }: OrderPanelPro
                 border:       "1px solid",
                 borderColor:  "divider",
                 borderRadius: 1,
-                px: 1.5,
-                py: 0.75,
-                height:       "100%",
-                display:      "flex",
-                flexDirection:"column",
+                px: 1.5, py: 0.75,
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
                 justifyContent: "center",
               }}
             >
@@ -363,37 +395,69 @@ export function OrderPanel({ symbol, symboltoken, exchange, ltp }: OrderPanelPro
           </Grid>
         </Grid>
 
-        {/* Error banner from server */}
-        {placingError && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {placingError}
+        {/* Risk warnings */}
+        {risk?.warnings.map((w, i) => (
+          <Alert key={i} severity="warning" sx={{ mt: 1.5, py: 0.5, fontSize: "0.73rem" }}>
+            {w}
           </Alert>
+        ))}
+
+        {/* Risk blocked indicator */}
+        {risk?.blocked && (
+          <Alert severity="error" sx={{ mt: 1.5, py: 0.5, fontSize: "0.73rem" }}>
+            {risk.reason}
+          </Alert>
+        )}
+
+        {/* Server error */}
+        {placingError && (
+          <Alert severity="error" sx={{ mt: 1.5 }}>{placingError}</Alert>
         )}
       </Box>
 
       {/* Footer */}
       <Divider />
       <Box sx={{ p: 2 }}>
-        <Button
-          variant="contained"
-          fullWidth
-          size="large"
-          color={isBuy ? "success" : "error"}
-          disableElevation
-          disabled={isPlacing}
-          onClick={handleSubmit}
-          startIcon={isPlacing ? <CircularProgress size={16} color="inherit" /> : undefined}
+        <Tooltip
+          title={risk?.blocked ? (risk.reason ?? "Order blocked by risk guard") : ""}
+          placement="top"
         >
-          {isPlacing
-            ? "Placing…"
-            : `${isBuy ? "Buy" : "Sell"} ${values.tradingsymbol || "Order"}`}
-        </Button>
+          <span style={{ display: "block" }}>
+            <Button
+              variant="contained"
+              fullWidth
+              size="large"
+              color={btnColor}
+              disableElevation
+              disabled={isPlacing || (risk?.blocked ?? false)}
+              onClick={handleSubmit}
+              startIcon={isPlacing ? <CircularProgress size={16} color="inherit" /> : undefined}
+              sx={{
+                fontWeight: 700,
+                background: risk?.blocked
+                  ? undefined
+                  : isBuy
+                  ? "linear-gradient(135deg, #00D97E, #00b367)"
+                  : "linear-gradient(135deg, #F23645, #c71c2c)",
+              }}
+            >
+              {isPlacing
+                ? "Placing…"
+                : risk?.blocked
+                ? "Risk Blocked"
+                : `${isBuy ? "Buy" : "Sell"} ${values.tradingsymbol || "Order"}`}
+            </Button>
+          </span>
+        </Tooltip>
       </Box>
 
       <ConfirmDialog
         open={confirmOpen}
         values={values}
         ltp={ltp}
+        riskWarnings={risk?.warnings ?? []}
+        riskBlocked={risk?.blocked ?? false}
+        blockReason={risk?.reason ?? null}
         onOk={handleConfirm}
         onCancel={() => setConfirmOpen(false)}
       />

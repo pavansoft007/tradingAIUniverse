@@ -14,8 +14,12 @@ import Skeleton             from "@mui/material/Skeleton";
 import Tooltip              from "@mui/material/Tooltip";
 import Typography           from "@mui/material/Typography";
 import { useMemo }          from "react";
-import { useWatchlistTicks, useConnectionStatus } from "@/hooks/useMarketWatch";
-import { MOCK_TICKERS }    from "@/lib/mock/market.mock";
+import {
+  useWatchlistTicks,
+  useWatchlistQuotes,
+  useWatchlistSymbolMap,
+  useConnectionStatus,
+} from "@/hooks/useMarketWatch";
 import type { AISignal }   from "@/types/market.types";
 import { WS_MODE }         from "@/types/smartws.types";
 
@@ -27,17 +31,17 @@ const SIGNAL_CONFIG = {
   hold: { label: "HOLD", color: "#F59E0B", bg: "rgba(245,158,11,0.12)", border: "rgba(245,158,11,0.25)", Icon: FiberManualRecordIcon },
 } as const;
 
-// ── Signal generation from live ticks ─────────────────────────────────────────
+// ── Signal generation from live prices ────────────────────────────────────────
 
 function reason(signal: "buy" | "sell" | "hold", chgPct: number): string {
   const abs = Math.abs(chgPct).toFixed(2);
   if (signal === "buy") {
-    if (chgPct > 3) return `Strong upward momentum, up ${abs}% from prev close`;
+    if (chgPct > 3)   return `Strong upward momentum, up ${abs}% from prev close`;
     if (chgPct > 1.5) return `Positive momentum, ${abs}% above prev close`;
     return `Mild bullish move, ${abs}% above prev close`;
   }
   if (signal === "sell") {
-    if (chgPct < -3) return `Heavy selling pressure, down ${abs}% from prev close`;
+    if (chgPct < -3)   return `Heavy selling pressure, down ${abs}% from prev close`;
     if (chgPct < -1.5) return `Bearish momentum, ${abs}% below prev close`;
     return `Mild weakness, ${abs}% below prev close`;
   }
@@ -170,43 +174,55 @@ function SkeletonRow() {
 
 export function AISignalsList() {
   const { watchlist, ticks } = useWatchlistTicks(WS_MODE.QUOTE);
-  const wsStatus = useConnectionStatus();
-  const isWsLive = wsStatus === "connected";
+  const wsStatus  = useConnectionStatus();
+  const isWsLive  = wsStatus === "connected";
+
+  // REST polling fallback — provides real prices when WS isn't delivering ticks
+  const restQuotes    = useWatchlistQuotes();    // Map<symbolToken, AngelQuote>
+  const symbolByToken = useWatchlistSymbolMap(); // Map<token, symbol>
 
   const signals = useMemo<AISignal[]>(() => {
-    // Collect items that have a live WebSocket tick
-    const liveItems: Array<{ symbol: string; ltp: number; prevClose: number }> = [];
-
+    // Priority 1: items with live WebSocket ticks
+    const wsItems: Array<{ symbol: string; ltp: number; prevClose: number }> = [];
     watchlist.forEach((item) => {
-      const key  = `${item.exchangeType}_${item.token}`;
-      const tick = ticks[key];
-      if (!tick?.ltp) return;
-      liveItems.push({
-        symbol:    item.symbol,
-        ltp:       tick.ltp,
-        prevClose: tick.close ?? tick.ltp,
-      });
+      const tick = ticks[`${item.exchangeType}_${item.token}`];
+      if (tick?.ltp) {
+        wsItems.push({
+          symbol:    item.symbol,
+          ltp:       tick.ltp,
+          prevClose: tick.close ?? tick.ltp,
+        });
+      }
     });
 
-    if (liveItems.length > 0) {
-      return generateSignals(liveItems)
+    if (wsItems.length > 0) {
+      return generateSignals(wsItems)
         .sort((a, b) => b.confidence - a.confidence)
         .slice(0, 5);
     }
 
-    // Fallback: generate signals from MOCK_TICKERS static prices
-    const mockItems = MOCK_TICKERS.map((t) => ({
-      symbol:    t.symbol,
-      ltp:       t.price,
-      prevClose: t.price / (1 + t.changePercent / 100),
-    }));
-    return generateSignals(mockItems)
-      .sort((a, b) => b.confidence - a.confidence)
-      .slice(0, 5);
-  }, [watchlist, ticks]);
+    // Priority 2: REST quote poll — real prices with 5 s delay
+    const restItems: Array<{ symbol: string; ltp: number; prevClose: number }> = [];
+    restQuotes.forEach((q, token) => {
+      const symbol = symbolByToken.get(token);
+      if (symbol && q.ltp) {
+        restItems.push({ symbol, ltp: q.ltp, prevClose: q.close ?? q.ltp });
+      }
+    });
 
-  const liveCount = watchlist.filter((item) => !!ticks[`${item.exchangeType}_${item.token}`]?.ltp).length;
-  const isLoading = watchlist.length === 0 && !isWsLive;
+    if (restItems.length > 0) {
+      return generateSignals(restItems)
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 5);
+    }
+
+    return [];
+  }, [watchlist, ticks, restQuotes, symbolByToken]);
+
+  const wsLiveCount   = watchlist.filter((item) => !!ticks[`${item.exchangeType}_${item.token}`]?.ltp).length;
+  const restLiveCount = restQuotes.size;
+  const isLoading     = signals.length === 0;
+  const signalSource  = wsLiveCount > 0 ? "ws" : restLiveCount > 0 ? "rest" : "loading";
 
   return (
     <Card sx={{ height: "100%" }}>
@@ -233,9 +249,11 @@ export function AISignalsList() {
             <Typography sx={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em" }}>
               AI Signals
             </Typography>
-            {liveCount > 0 && (
+            {signalSource !== "loading" && (
               <Typography sx={{ fontSize: 10, color: "text.secondary", lineHeight: 1 }}>
-                {liveCount} live tick{liveCount > 1 ? "s" : ""}
+                {signalSource === "ws"
+                  ? `${wsLiveCount} live WebSocket tick${wsLiveCount > 1 ? "s" : ""}`
+                  : `${restLiveCount} via REST (5 s)`}
               </Typography>
             )}
           </Box>
@@ -243,18 +261,25 @@ export function AISignalsList() {
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Tooltip
-            title={isWsLive ? "Signals generated from live WebSocket ticks" : "WebSocket not connected — showing price-based estimates"}
+            title={
+              isWsLive
+                ? "Signals generated from live WebSocket ticks"
+                : signalSource === "rest"
+                ? "WebSocket offline — signals from REST prices (5 s delay)"
+                : "Fetching market data…"
+            }
             placement="left"
           >
             <Chip
-              label={isWsLive ? "Live" : "Cached"}
+              label={isWsLive ? "Live" : signalSource === "rest" ? "REST" : "Loading"}
               size="small"
               icon={
-                isWsLive
+                signalSource !== "loading"
                   ? (
                     <Box component="span" sx={{
                       width: 6, height: 6, borderRadius: "50%",
-                      background: "#00D97E", display: "inline-block",
+                      background: isWsLive ? "#00D97E" : "#38BDF8",
+                      display: "inline-block",
                       animation: "pulse 1.5s ease-in-out infinite",
                       "@keyframes pulse": { "0%,100%": { opacity: 1 }, "50%": { opacity: 0.3 } },
                       ml: "6px !important", mr: "-2px !important",
@@ -264,22 +289,28 @@ export function AISignalsList() {
               }
               sx={{
                 height: 22, fontSize: 10, fontWeight: 700,
-                background:  isWsLive ? "rgba(0,217,126,0.12)"  : "rgba(245,158,11,0.10)",
-                color:       isWsLive ? "#00D97E"                : "#F59E0B",
-                border:      isWsLive ? "1px solid rgba(0,217,126,0.25)" : "1px solid rgba(245,158,11,0.25)",
+                background:  isWsLive ? "rgba(0,217,126,0.12)" : signalSource === "rest" ? "rgba(56,189,248,0.12)" : "rgba(245,158,11,0.10)",
+                color:       isWsLive ? "#00D97E"               : signalSource === "rest" ? "#38BDF8"               : "#F59E0B",
+                border:      isWsLive
+                  ? "1px solid rgba(0,217,126,0.25)"
+                  : signalSource === "rest"
+                  ? "1px solid rgba(56,189,248,0.25)"
+                  : "1px solid rgba(245,158,11,0.25)",
               }}
             />
           </Tooltip>
-          <Chip
-            label={`${signals.length} Active`}
-            size="small"
-            sx={{
-              height: 22, fontSize: 10, fontWeight: 700,
-              background: "rgba(99,102,241,0.15)",
-              color: "#818CF8",
-              border: "1px solid rgba(99,102,241,0.25)",
-            }}
-          />
+          {signals.length > 0 && (
+            <Chip
+              label={`${signals.length} Active`}
+              size="small"
+              sx={{
+                height: 22, fontSize: 10, fontWeight: 700,
+                background: "rgba(99,102,241,0.15)",
+                color: "#818CF8",
+                border: "1px solid rgba(99,102,241,0.25)",
+              }}
+            />
+          )}
         </Box>
       </Box>
 
