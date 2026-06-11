@@ -11,8 +11,9 @@ import { AIAssistantPanel }    from "@/components/features/ai/AIAssistantPanel";
 import { OrderNotifications }  from "@/components/features/trading/OrderNotifications";
 import { Header }              from "@/components/layout/Header";
 import { Sidebar, NAV_W }      from "@/components/layout/Sidebar";
+import { useClientCodeRecovery } from "@/hooks/useAngelOneAuth";
 import { useSmartWsConnection } from "@/hooks/useMarketWatch";
-import { useAIStore }          from "@/store/useAIStore";
+import { useAIStore }           from "@/store/useAIStore";
 
 // Header heights matching Minimal UI config-global
 export const HEADER_MOBILE  = 64;
@@ -24,6 +25,7 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   useSmartWsConnection();
+  useClientCodeRecovery(); // silently recovers clientCode from profile API if missing
 
   const theme      = useTheme();
   const isDesktop  = useMediaQuery(theme.breakpoints.up("lg"));

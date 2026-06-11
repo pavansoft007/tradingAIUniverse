@@ -120,6 +120,36 @@ export function useAngelOneSession() {
   );
 }
 
+// ── Client code recovery ──────────────────────────────────────────────────────
+
+/**
+ * Silently recovers the client code from the Angel One profile API when
+ * it's missing from both sessionStorage and localStorage (e.g. after a
+ * page refresh in a session created before the "always-persist" fix).
+ *
+ * Call once near the root of the authenticated layout.
+ */
+export function useClientCodeRecovery() {
+  const isAuthenticated = useAngelOneStore((s) => s.isAuthenticated);
+  const isHydrated      = useAngelOneStore((s) => s.isHydrated);
+  const clientCode      = useAngelOneStore((s) => s.clientCode);
+  const setClientCode   = useAngelOneStore((s) => s.setClientCode);
+
+  useEffect(() => {
+    if (!isHydrated || !isAuthenticated || clientCode) return;
+    let cancelled = false;
+    angelOneService
+      .getProfile()
+      .then((res) => {
+        if (cancelled) return;
+        const cc = res.data?.clientcode;
+        if (cc) setClientCode(cc);
+      })
+      .catch(() => {/* silent — worst case is user must re-login */});
+    return () => { cancelled = true; };
+  }, [isHydrated, isAuthenticated, clientCode, setClientCode]);
+}
+
 // ── "Remember me" client code ─────────────────────────────────────────────────
 
 export function useRememberedClientCode() {

@@ -2,33 +2,23 @@
  * GET /api/scrip-search?q=RELIA&exchange=NSE
  *
  * Searches the Angel One OpenAPI scrip master file.
- * The master JSON (~25 MB) is fetched once per server process and kept in
- * memory; a stale-while-revalidate pattern refreshes it every hour.
+ * The master JSON (~35 MB) is fetched once per server process and cached for 1h.
  *
  * Results are scored so:
- *   1. Exact symbol match (e.g. "RELIANCE-EQ")
+ *   1. Exact symbol match  (e.g. "TCS-EQ")
  *   2. Symbol starts with query
- *   3. Name contains query
+ *   3. Name starts with query
+ *   4. Name contains query
+ *
+ * NOTE: The Angel One scrip master uses uppercase exchange names in the
+ * `exch_seg` field (e.g. "NSE", "BSE", "NFO") — NOT the lowercase segment
+ * names ("nse_cm") that were used in older API versions.
  */
 
 import { type NextRequest, NextResponse } from "next/server";
 
-// ── Exchange segment mapping ───────────────────────────────────────────────────
-// The scrip master file uses lowercase segment names (e.g. "nse_cm") while the
-// Angel One order API uses uppercase names (e.g. "NSE").  We map both ways.
-
-const EXCH_SEG_MAP: Record<string, string> = {
-  NSE: "nse_cm",
-  BSE: "bse_cm",
-  NFO: "nse_fo",
-  MCX: "mcx_fo",
-  BFO: "bse_fo",
-  CDS: "cde_fo",
-};
-
-const EXCH_SEG_REVERSE: Record<string, string> = Object.fromEntries(
-  Object.entries(EXCH_SEG_MAP).map(([k, v]) => [v, k]),
-);
+// ── Instrument types to exclude (indices, not directly tradeable) ──────────────
+const SKIP_TYPES = new Set(["AMXIDX", "UNDIND"]);
 
 // ── Scrip master types ────────────────────────────────────────────────────────
 
@@ -39,20 +29,20 @@ interface RawScrip {
   expiry:         string;
   strike:         string;
   lotsize:        string;
-  instrumenttype: string;  // "" = equity, "FUTSTK" = futures, "OPTSTK" = options …
-  exch_seg:       string;  // "nse_cm", "bse_cm", "nse_fo", "mcx_fo" …
-  tick_size:      string;  // paise (e.g. "5.000000" = ₹0.05)
+  instrumenttype: string;  // "" | "EQ" = equity; "AMXIDX" = index; "FUTSTK" = futures …
+  exch_seg:       string;  // "NSE", "BSE", "NFO", "MCX" …
+  tick_size:      string;
 }
 
 export interface ScripResult {
-  tradingsymbol: string;
-  symboltoken:   string;
-  exchange:      string;
-  name:          string;
-  instrumenttype:string;
-  lotsize:       number;
-  tickSize:      number;
-  expiry:        string;
+  tradingsymbol:  string;
+  symboltoken:    string;
+  exchange:       string;
+  name:           string;
+  instrumenttype: string;
+  lotsize:        number;
+  tickSize:       number;
+  expiry:         string;
 }
 
 // ── In-process cache ──────────────────────────────────────────────────────────
@@ -60,8 +50,8 @@ export interface ScripResult {
 const MASTER_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
 const TTL_MS     = 60 * 60 * 1_000;   // 1 h
 
-let cache: RawScrip[] | null  = null;
-let cacheAt                   = 0;
+let cache:   RawScrip[] | null = null;
+let cacheAt                    = 0;
 
 async function getMaster(): Promise<RawScrip[]> {
   if (cache && Date.now() - cacheAt < TTL_MS) return cache;
@@ -80,16 +70,14 @@ async function getMaster(): Promise<RawScrip[]> {
 
 function normalise(s: RawScrip): ScripResult {
   return {
-    tradingsymbol: s.symbol,
-    symboltoken:   s.token,
-    // Convert "nse_cm" → "NSE" so the result can be passed directly to order API
-    exchange:      EXCH_SEG_REVERSE[s.exch_seg] ?? s.exch_seg.toUpperCase(),
-    name:          s.name,
-    instrumenttype:s.instrumenttype,
-    lotsize:       parseInt(s.lotsize, 10) || 1,
-    // tick_size is in paise in the master file (e.g. "5.000000" → ₹0.05)
-    tickSize:      parseFloat(s.tick_size) / 100 || 0.05,
-    expiry:        s.expiry || "",
+    tradingsymbol:  s.symbol,
+    symboltoken:    s.token,
+    exchange:       s.exch_seg,   // "NSE", "BSE", etc. — already uppercase
+    name:           s.name,
+    instrumenttype: s.instrumenttype,
+    lotsize:        parseInt(s.lotsize, 10) || 1,
+    tickSize:       parseFloat(s.tick_size) / 100 || 0.05,
+    expiry:         s.expiry || "",
   };
 }
 
@@ -107,19 +95,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   try {
     const all = await getMaster();
 
-    const EQUITY_TYPES = new Set(["", "EQ"]);    // blank = equity on NSE/BSE
-    const exchSeg = EXCH_SEG_MAP[exchange] ?? exchange.toLowerCase();
-
     const scored: Array<[number, RawScrip]> = [];
 
     for (const s of all) {
-      if (s.exch_seg !== exchSeg) continue;
-      if (!EQUITY_TYPES.has(s.instrumenttype)) continue;
+      // Filter by exchange segment (direct match — field is already uppercase)
+      if (s.exch_seg !== exchange) continue;
+
+      // Skip non-tradeable instrument types (indices, etc.)
+      if (SKIP_TYPES.has(s.instrumenttype)) continue;
 
       const sym  = s.symbol.toUpperCase();
       const name = s.name.toUpperCase();
 
-      if (sym === q || sym === `${q}-EQ` || sym === `${q}-BE`) {
+      if (sym === q || sym === `${q}-EQ` || sym === `${q}-BE` || sym === `${q}-N`) {
         scored.push([0, s]);
       } else if (sym.startsWith(q)) {
         scored.push([1, s]);
@@ -128,8 +116,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       } else if (name.includes(q)) {
         scored.push([3, s]);
       }
-
-      if (scored.length >= 200) break;  // early exit — score then slice
     }
 
     const results = scored

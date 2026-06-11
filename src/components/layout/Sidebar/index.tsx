@@ -4,6 +4,7 @@ import AnalyticsIcon from "@mui/icons-material/Analytics";
 import AutoGraphIcon from "@mui/icons-material/AutoGraph";
 import DashboardRoundedIcon from "@mui/icons-material/DashboardRounded";
 import NotificationsNoneIcon from "@mui/icons-material/NotificationsNone";
+import PsychologyIcon from "@mui/icons-material/Psychology";
 import SettingsOutlinedIcon from "@mui/icons-material/SettingsOutlined";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import StorefrontOutlinedIcon from "@mui/icons-material/StorefrontOutlined";
@@ -36,9 +37,10 @@ const NAV_SECTIONS = [
     items: [
       { title: "Dashboard", href: "/dashboard", icon: <DashboardRoundedIcon /> },
       { title: "Markets",   href: "/markets",   icon: <StorefrontOutlinedIcon /> },
-      { title: "Trading",   href: "/trading",   icon: <SwapHorizIcon /> },
-      { title: "Portfolio", href: "/portfolio", icon: <AutoGraphIcon /> },
-      { title: "Analytics", href: "/analytics", icon: <AnalyticsIcon /> },
+      { title: "Trading",       href: "/trading",       icon: <SwapHorizIcon /> },
+      { title: "Paper Trading", href: "/paper-trading", icon: <PsychologyIcon /> },
+      { title: "Portfolio",     href: "/portfolio",     icon: <AutoGraphIcon /> },
+      { title: "Analytics",     href: "/analytics",     icon: <AnalyticsIcon /> },
     ],
   },
   {

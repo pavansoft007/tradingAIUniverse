@@ -12,7 +12,7 @@
  */
 
 import { create } from "zustand";
-import { getTokenExpiry, isTokenExpired, stripBearerPrefix } from "@/lib/utils/jwt";
+import { decodeJWTPayload, getTokenExpiry, isTokenExpired, stripBearerPrefix } from "@/lib/utils/jwt";
 import { sessionUtil } from "@/lib/utils/session";
 import type { AngelOneSession, AngelOneTokens, AngelOneUser } from "@/types/angelone.types";
 
@@ -37,6 +37,9 @@ interface AngelOneStore {
 
   /** Restore state from sessionStorage on page reload (call once on mount). */
   rehydrate: () => void;
+
+  /** Updates clientCode in-memory and persists to localStorage (called by recovery hook). */
+  setClientCode: (clientCode: string) => void;
 
   /** Returns true if the current JWT is valid and not near-expired. */
   isSessionValid: () => boolean;
@@ -67,6 +70,9 @@ export const useAngelOneStore = create<AngelOneStore>((set, get) => ({
     sessionUtil.saveJWT(session.jwtToken);
     sessionUtil.saveFeedToken(session.feedToken);
     if (user) sessionUtil.saveUser(user);
+    // Always persist clientCode to localStorage so it survives page refresh
+    // (clientCode is non-sensitive — it's the Angel One account ID)
+    if (clientCode) sessionUtil.saveRememberedClientCode(clientCode);
     // Set the session cookie so Next.js middleware allows dashboard access
     sessionUtil.setSessionCookie();
 
@@ -97,6 +103,17 @@ export const useAngelOneStore = create<AngelOneStore>((set, get) => ({
 
     if (jwt && !isTokenExpired(jwt, 60_000)) {
       const expiry = getTokenExpiry(jwt) ?? Date.now();
+      // clientCode: priority order —
+      //   1. user object saved to sessionStorage at login
+      //   2. localStorage "remembered client" (written unconditionally since our fix)
+      //   3. JWT payload claim "clientcode" (Angel One embeds it in the token)
+      const jwtPayload = decodeJWTPayload(jwt);
+      const clientCode =
+        user?.clientcode ||
+        sessionUtil.loadRememberedClientCode() ||
+        (jwtPayload.clientcode as string | undefined) ||
+        (jwtPayload.sub as string | undefined) ||
+        null;
       set({
         session: {
           jwtToken: jwt,
@@ -105,7 +122,7 @@ export const useAngelOneStore = create<AngelOneStore>((set, get) => ({
           tokenExpiry: expiry,
         },
         user: user ?? null,
-        clientCode: user?.clientcode ?? null,
+        clientCode,
         isAuthenticated: true,
         isHydrated: true,
       });
@@ -114,6 +131,11 @@ export const useAngelOneStore = create<AngelOneStore>((set, get) => ({
       sessionUtil.clearAll();
       set({ isHydrated: true });
     }
+  },
+
+  setClientCode(clientCode) {
+    sessionUtil.saveRememberedClientCode(clientCode);
+    set({ clientCode });
   },
 
   isSessionValid() {

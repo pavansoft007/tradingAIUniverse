@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./paper_trading.db"
+}
+
+// ── Virtual wallet (one per Angel One client code) ────────────────────────────
+
+model Wallet {
+  id             String        @id @default(uuid())
+  clientCode     String        @unique
+  balance        Float         @default(1000000)   // ₹10 lakh virtual cash
+  usedMargin     Float         @default(0)
+  totalDeposited Float         @default(1000000)
+  totalWithdrawn Float         @default(0)
+  realizedPnl    Float         @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  orders       PaperOrder[]
+  positions    Position[]
+  trades       Trade[]
+  transactions WalletTransaction[]
+}
+
+// ── Deposit / withdrawal audit trail ─────────────────────────────────────────
+
+model WalletTransaction {
+  id            String   @id @default(uuid())
+  walletId      String
+  wallet        Wallet   @relation(fields: [walletId], references: [id])
+  type          String   // DEPOSIT | WITHDRAW | BUY_DEBIT | SELL_CREDIT | BROKERAGE
+  amount        Float
+  balanceBefore Float
+  balanceAfter  Float
+  description   String
+  createdAt     DateTime @default(now())
+}
+
+// ── Paper orders ──────────────────────────────────────────────────────────────
+
+model PaperOrder {
+  id              String    @id @default(uuid())
+  walletId        String
+  wallet          Wallet    @relation(fields: [walletId], references: [id])
+  tradingsymbol   String
+  symboltoken     String
+  exchange        String    // NSE | BSE
+  transactiontype String    // BUY | SELL
+  ordertype       String    // MARKET | LIMIT | STOPLOSS_LIMIT | STOPLOSS_MARKET
+  producttype     String    // MIS | CNC | NRML
+  quantity        Int
+  price           Float     @default(0)         // 0 for market orders
+  triggerprice    Float     @default(0)
+  status          String    @default("OPEN")    // OPEN | FILLED | CANCELLED | REJECTED | PENDING
+  filledQty       Int       @default(0)
+  avgFillPrice    Float     @default(0)
+  slippagePct     Float     @default(0)
+  rejectionReason String?
+  source          String    @default("manual")  // manual | ai_signal | strategy
+  notes           String?
+  placedAt        DateTime  @default(now())
+  filledAt        DateTime?
+  cancelledAt     DateTime?
+
+  trades Trade[]
+}
+
+// ── Open positions (net per symbol+product) ───────────────────────────────────
+
+model Position {
+  id            String   @id @default(uuid())
+  walletId      String
+  wallet        Wallet   @relation(fields: [walletId], references: [id])
+  tradingsymbol String
+  symboltoken   String
+  exchange      String
+  producttype   String   // MIS | CNC | NRML
+  netQty        Int      // + = long, - = short
+  avgBuyPrice   Float    @default(0)
+  avgSellPrice  Float    @default(0)
+  buyQty        Int      @default(0)
+  sellQty       Int      @default(0)
+  realizedPnl   Float    @default(0)
+  lastLtp       Float    @default(0)
+  openedAt      DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([walletId, tradingsymbol, producttype])
+}
+
+// ── Immutable trade fills — the trade journal ─────────────────────────────────
+
+model Trade {
+  id              String     @id @default(uuid())
+  walletId        String
+  wallet          Wallet     @relation(fields: [walletId], references: [id])
+  orderId         String
+  order           PaperOrder @relation(fields: [orderId], references: [id])
+  tradingsymbol   String
+  symboltoken     String
+  exchange        String
+  transactiontype String     // BUY | SELL
+  producttype     String
+  quantity        Int
+  fillPrice       Float
+  slippagePct     Float      @default(0)
+  tradeValue      Float
+  realizedPnl     Float      @default(0)  // non-zero only for closing trades
+  closingTrade    Boolean    @default(false)
+  notes           String?
+  executedAt      DateTime   @default(now())
+}
