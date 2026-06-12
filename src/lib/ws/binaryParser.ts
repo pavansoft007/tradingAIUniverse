@@ -71,6 +71,9 @@ export function parseBinaryTick(buffer: ArrayBuffer): Tick | null {
     const exchangeTimestamp = readInt(view, 35);
     const ltp = readPrice(view, 43);
 
+    // Sanity guard: Indian stock prices are ₹0.01–₹2,00,000. Discard malformed packets.
+    if (ltp <= 0 || ltp > 200_000) return null;
+
     const tick: Tick = { mode, exchangeType, token, sequenceNumber, exchangeTimestamp, ltp };
 
     if (mode >= 2 && buffer.byteLength >= 123) {

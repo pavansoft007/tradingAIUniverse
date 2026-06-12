@@ -14,7 +14,11 @@
       "Bash(New-Item -Path \"d:\\\\tradingAIUniverse\\\\src\\\\hooks\\\\usePortfolio.ts\" -ItemType File -Force)",
       "Bash(Out-Null)",
       "PowerShell(New-Item -Path \"d:\\\\tradingAIUniverse\\\\src\\\\hooks\\\\usePortfolio.ts\" -ItemType File -Force)",
-      "PowerShell(New-Item -Path \"d:\\\\tradingAIUniverse\\\\src\\\\hooks\\\\useMarketQuote.ts\" -ItemType File -Force)"
+      "PowerShell(New-Item -Path \"d:\\\\tradingAIUniverse\\\\src\\\\hooks\\\\useMarketQuote.ts\" -ItemType File -Force)",
+      "Bash(Get-ChildItem -Path \"d:\\\\pro\\\\tradingAIUniverse\\\\src\\\\lib\" -Recurse -File -Include \"*.ts\")",
+      "Bash(Select-Object -First 30 FullName)",
+      "Bash(Get-ChildItem -Path \"d:\\\\pro\\\\tradingAIUniverse\\\\src\" -Directory)",
+      "Bash(node -e \"const lc = require\\('lightweight-charts'\\); console.log\\('lightweight-charts version:', lc.version\\(\\)\\)\")"
     ]
   }
 }

@@ -142,13 +142,13 @@ function SignalRow({ signal }: { signal: AISignal }) {
         <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
           Target{" "}
           <Typography component="span" sx={{ fontSize: 11, fontWeight: 700, color: "#00D97E", fontFamily: "monospace" }}>
-            ₹{signal.targetPrice.toLocaleString("en-IN")}
+            ₹{signal.targetPrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Typography>
         </Typography>
         <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
           Stop{" "}
           <Typography component="span" sx={{ fontSize: 11, fontWeight: 700, color: "#F23645", fontFamily: "monospace" }}>
-            ₹{signal.stopLoss.toLocaleString("en-IN")}
+            ₹{signal.stopLoss.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </Typography>
         </Typography>
       </Box>
@@ -182,15 +182,17 @@ export function AISignalsList() {
   const symbolByToken = useWatchlistSymbolMap(); // Map<token, symbol>
 
   const signals = useMemo<AISignal[]>(() => {
-    // Priority 1: items with live WebSocket ticks
+    const isValidPrice = (p: number) => p > 0 && p < 200_000;
+
+    // Priority 1: WS ticks with valid prices (sanity-checked)
     const wsItems: Array<{ symbol: string; ltp: number; prevClose: number }> = [];
     watchlist.forEach((item) => {
       const tick = ticks[`${item.exchangeType}_${item.token}`];
-      if (tick?.ltp) {
+      if (tick?.ltp && isValidPrice(tick.ltp)) {
         wsItems.push({
           symbol:    item.symbol,
           ltp:       tick.ltp,
-          prevClose: tick.close ?? tick.ltp,
+          prevClose: (tick.close && isValidPrice(tick.close)) ? tick.close : tick.ltp,
         });
       }
     });
@@ -205,8 +207,8 @@ export function AISignalsList() {
     const restItems: Array<{ symbol: string; ltp: number; prevClose: number }> = [];
     restQuotes.forEach((q, token) => {
       const symbol = symbolByToken.get(token);
-      if (symbol && q.ltp) {
-        restItems.push({ symbol, ltp: q.ltp, prevClose: q.close ?? q.ltp });
+      if (symbol && q.ltp && isValidPrice(q.ltp)) {
+        restItems.push({ symbol, ltp: q.ltp, prevClose: q.close && isValidPrice(q.close) ? q.close : q.ltp });
       }
     });
 
@@ -219,7 +221,8 @@ export function AISignalsList() {
     return [];
   }, [watchlist, ticks, restQuotes, symbolByToken]);
 
-  const wsLiveCount   = watchlist.filter((item) => !!ticks[`${item.exchangeType}_${item.token}`]?.ltp).length;
+  const isValidPrice = (p: number) => p > 0 && p < 200_000;
+  const wsLiveCount   = watchlist.filter((item) => { const t = ticks[`${item.exchangeType}_${item.token}`]; return !!t?.ltp && isValidPrice(t.ltp); }).length;
   const restLiveCount = restQuotes.size;
   const isLoading     = signals.length === 0;
   const signalSource  = wsLiveCount > 0 ? "ws" : restLiveCount > 0 ? "rest" : "loading";

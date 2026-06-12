@@ -31,9 +31,26 @@ import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
 import { ConnectionStatus } from "@/components/features/market/ConnectionStatus";
 import { PriceCell } from "@/components/features/market/PriceCell";
-import { useConnectionStatus, useWatchlistActions, useWatchlistTicks } from "@/hooks/useMarketWatch";
+import { useConnectionStatus, useWatchlistActions, useWatchlistQuotes, useWatchlistTicks } from "@/hooks/useMarketWatch";
+import type { AngelQuote } from "@/types/angel-portfolio.types";
 import type { Tick, WatchlistItem } from "@/types/smartws.types";
 import { EXCHANGE_LABEL, EXCHANGE_TYPE, WS_MODE } from "@/types/smartws.types";
+
+const isValidPrice = (p: number | undefined): p is number => typeof p === "number" && p > 0 && p < 200_000;
+
+function mergeTickWithQuote(tick: Tick | undefined, quote: AngelQuote | undefined): Tick | undefined {
+  if (tick && isValidPrice(tick.ltp)) return tick;
+  if (!quote?.ltp || !isValidPrice(quote.ltp)) return undefined;
+  return {
+    ...(tick ?? {} as Tick),
+    ltp:               quote.ltp,
+    open:              isValidPrice(quote.open)   ? quote.open   : undefined,
+    high:              isValidPrice(quote.high)   ? quote.high   : undefined,
+    low:               isValidPrice(quote.low)    ? quote.low    : undefined,
+    close:             isValidPrice(quote.close)  ? quote.close  : undefined,
+    volumeTradedToday: quote.volume,
+  } as Tick;
+}
 
 // ── Formatters ────────────────────────────────────────────────────────────────
 
@@ -306,6 +323,7 @@ export function MarketWatchTable() {
   const connectionStatus                    = useConnectionStatus();
   const { watchlist, ticks }                = useWatchlistTicks(WS_MODE.QUOTE);
   const { addToWatchlist, removeFromWatchlist } = useWatchlistActions();
+  const restQuotes                          = useWatchlistQuotes();
 
   const handleSort = (field: SortField) => {
     if (field === sortField) {
@@ -316,10 +334,19 @@ export function MarketWatchTable() {
     }
   };
 
+  const effectiveTicks = useMemo(() => {
+    const merged: Record<string, Tick | undefined> = {};
+    watchlist.forEach((item) => {
+      const key = tickKey(item.exchangeType, item.token);
+      merged[key] = mergeTickWithQuote(ticks[key], restQuotes.get(item.token));
+    });
+    return merged;
+  }, [watchlist, ticks, restQuotes]);
+
   const sortedWatchlist = useMemo(() => {
     return [...watchlist].sort((a, b) => {
-      const ta = ticks[tickKey(a.exchangeType, a.token)];
-      const tb = ticks[tickKey(b.exchangeType, b.token)];
+      const ta = effectiveTicks[tickKey(a.exchangeType, a.token)];
+      const tb = effectiveTicks[tickKey(b.exchangeType, b.token)];
 
       if (sortField === "symbol") {
         const cmp = a.symbol.localeCompare(b.symbol);
@@ -340,13 +367,13 @@ export function MarketWatchTable() {
       }
       return sortDir === "asc" ? va - vb : vb - va;
     });
-  }, [watchlist, ticks, sortField, sortDir]);
+  }, [watchlist, effectiveTicks, sortField, sortDir]);
 
   // Market breadth
   const breadth = useMemo(() => {
     return watchlist.reduce(
       (acc, item) => {
-        const tick = ticks[tickKey(item.exchangeType, item.token)];
+        const tick = effectiveTicks[tickKey(item.exchangeType, item.token)];
         if (!tick?.close || tick.close === 0) return acc;
         const change = tick.ltp - tick.close;
         if (change > 0) acc.gainers++;
@@ -356,7 +383,7 @@ export function MarketWatchTable() {
       },
       { gainers: 0, losers: 0, unchanged: 0 },
     );
-  }, [watchlist, ticks]);
+  }, [watchlist, effectiveTicks]);
 
   const breadthTotal = breadth.gainers + breadth.losers + breadth.unchanged;
 
@@ -555,7 +582,7 @@ export function MarketWatchTable() {
                 <WatchRow
                   key={item.token}
                   item={item}
-                  tick={ticks[tickKey(item.exchangeType, item.token)]}
+                  tick={effectiveTicks[tickKey(item.exchangeType, item.token)]}
                   onRemove={removeFromWatchlist}
                 />
               ))
